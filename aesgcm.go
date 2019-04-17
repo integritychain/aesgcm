@@ -1,10 +1,9 @@
-package main
+package aesgcm
 
 // See https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.197.pdf
 
 import (
 	"encoding/binary"
-	"fmt"
 )
 
 var initKey = [4]uint32{0x2b7e1516, 0x28aed2a6, 0xabf71588, 0x09cf4f3c}
@@ -49,11 +48,4 @@ func RotWord(word uint32) uint32 {
 	bytes2[3] = bytes1[0]
 	var x = binary.BigEndian.Uint32(bytes2)
 	return x
-}
-
-func main() {
-	fmt.Printf("Rot: before: %v\nafter:  %v\n", initKey[3], RotWord(initKey[3]))
-
-	fmt.Printf("Sub: before: %v\nafter:  %v", initKey, SubWord(initKey[0]))
-
 }
