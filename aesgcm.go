@@ -6,7 +6,8 @@ import (
 	"encoding/binary"
 )
 
-var initKey = [4]uint32{0x2b7e1516, 0x28aed2a6, 0xabf71588, 0x09cf4f3c}
+// Key schedule
+var w [44]uint32
 
 // From page 16
 var sBox = [16][16]byte{
@@ -48,4 +49,22 @@ func RotWord(word uint32) uint32 {
 	bytes2[3] = bytes1[0]
 	var x = binary.BigEndian.Uint32(bytes2)
 	return x
+}
+
+func SetKey(key [4]uint32) {
+	copy(w[0:4], key[0:4])
+}
+
+func ExpandKey() {
+	rcon := [10]uint32{0x01000000, 0x02000000, 0x04000000, 0x08000000, 0x10000000, 0x20000000, 0x40000000, 0x80000000, 0x1b000000, 0x36000000}
+	for i := uint32(4); i < 44; i++ {
+		temp := w[i-1]
+		if i%4 == 0 {
+			rw := RotWord(temp)
+			sw := SubWord(rw)
+			var rc = rcon[(i/4)-1]
+			temp = sw ^ rc
+		}
+		w[i] = w[i-4] ^ temp
+	}
 }
