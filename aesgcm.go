@@ -74,7 +74,7 @@ func ShiftRows(state [4][4]byte) [4][4]byte {
 func MixColumns(state [4][4]byte) [4][4]byte {
 	var newState = [4][4]byte{}
 
-	newState[0][0] = (0x02 & state[0][0]) ^ (0x03 & state[0][1]) ^ state[0][2] ^ state[0][3]
+	newState[0][0] = (0x02 * state[0][0]) ^ (0x03 * state[0][1]) ^ state[0][2] ^ state[0][3]
 	return newState
 }
 

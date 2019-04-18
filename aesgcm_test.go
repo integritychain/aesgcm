@@ -31,6 +31,23 @@ func ExampleSubWord() {
 	// Output: Sub: input 2b7e1516  --  output f1f35947
 }
 
+func ExampleMixColumns() {
+	var initState = [4][4]byte{
+		{0xd4, 0xe0, 0xb8, 0x1e},
+		{0xbf, 0xb4, 0x41, 0x27},
+		{0x5d, 0x52, 0x11, 0x98},
+		{0x30, 0xae, 0xf1, 0xe5}}
+	nextState := MixColumns(initState)
+	prettyPrintState(nextState)
+
+	t0 := (0xd4 * 0x02) % 17
+	t1 := (0xbf * 0x03) % 17
+	t2 := 0x5d
+	t3 := 0x30
+	fmt.Printf("%x", t0^t1^t2^t3)
+	// Output: asdf
+}
+
 var initKey = [4]uint32{0x2b7e1516, 0x28aed2a6, 0xabf71588, 0x09cf4f3c}
 
 func TestSetKey(t *testing.T) {
