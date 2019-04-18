@@ -29,7 +29,10 @@ var sBox = [16][16]byte{
 	{0x8c, 0xa1, 0x89, 0x0d, 0xbf, 0xe6, 0x42, 0x68, 0x41, 0x99, 0x2d, 0x0f, 0xb0, 0x54, 0xbb, 0x16},
 }
 
-func SubWord(word uint32) uint32 {
+var state [4][4]byte
+
+// Note: Cipher calls this SubBytes while Key Expansion calls this SubWord; same thing (?)
+func SubBytes(word uint32) uint32 {
 	var bytes = make([]byte, 4)
 	binary.BigEndian.PutUint32(bytes, word) // byte0->MSB
 	for i := 0; i < 4; i++ {
@@ -41,6 +44,7 @@ func SubWord(word uint32) uint32 {
 	return x
 }
 
+// Note: Key Expansion calls this RotWord; same thing (?)
 func RotWord(word uint32) uint32 {
 	var bytes1 = make([]byte, 4)
 	binary.BigEndian.PutUint32(bytes1, word) // byte0->MSB
@@ -49,6 +53,29 @@ func RotWord(word uint32) uint32 {
 	bytes2[3] = bytes1[0]
 	var x = binary.BigEndian.Uint32(bytes2)
 	return x
+}
+
+func ShiftRows(state [4][4]byte) [4][4]byte {
+	var newState = [4][4]byte{}
+	copy(newState[0][0:4], state[0][0:4]) // Row 0 is unchanged
+
+	copy(newState[1][0:3], state[1][1:4]) // Row 1
+	copy(newState[1][3:4], state[1][0:1]) // Row 1
+
+	copy(newState[2][0:2], state[2][2:4]) // Row 2
+	copy(newState[2][2:4], state[2][0:2]) // Row 2
+
+	copy(newState[3][0:1], state[2][3:4]) // Row 3
+	copy(newState[3][1:4], state[2][0:3]) // Row 3
+
+	return newState
+}
+
+func MixColumns(state [4][4]byte) [4][4]byte {
+	var newState = [4][4]byte{}
+
+	newState[0][0] = (0x02 & state[0][0]) ^ (0x03 & state[0][1]) ^ state[0][2] ^ state[0][3]
+	return newState
 }
 
 func SetKey(key [4]uint32) {
@@ -61,7 +88,7 @@ func ExpandKey() {
 		temp := w[i-1]
 		if i%4 == 0 {
 			rw := RotWord(temp)
-			sw := SubWord(rw)
+			sw := SubBytes(rw)
 			var rc = rcon[(i/4)-1]
 			temp = sw ^ rc
 		}

@@ -13,6 +13,12 @@ func assertEquals(t *testing.T, expected uint32, actual uint32, message interfac
 	}
 }
 
+func prettyPrintState(state [4][4]byte) {
+	for i := 0; i < 4; i++ {
+		fmt.Printf(" %02x %02x %02x %02x\n", state[i][0], state[i][1], state[i][2], state[i][3])
+	}
+}
+
 func ExampleRotWord() {
 	var x = RotWord(initKey[3])
 	fmt.Printf("Rot: input %08x  --  output %08x\n", initKey[3], x)
@@ -20,7 +26,7 @@ func ExampleRotWord() {
 }
 
 func ExampleSubWord() {
-	var x = SubWord(initKey[0])
+	var x = SubBytes(initKey[0])
 	fmt.Printf("Sub: input %08x  --  output %08x\n", initKey[0], x)
 	// Output: Sub: input 2b7e1516  --  output f1f35947
 }
@@ -39,4 +45,16 @@ func TestExpandKey(t *testing.T) {
 	SetKey(initKey)
 	ExpandKey()
 	assertEquals(t, 0xb6630ca6, w[43], fmt.Sprintf("Key 43 was %08x", w[43]))
+}
+
+func ExampleShiftRows() {
+	var initState = [4][4]byte{{0x00, 0x01, 0x02, 0x03}, {0x10, 0x11, 0x12, 0x13},
+		{0x20, 0x21, 0x22, 0x23}, {0x30, 0x31, 0x32, 0x33}}
+	nextState := ShiftRows(initState)
+	prettyPrintState(nextState) // Following output is a bit oversensitive to spacing
+	// Output: 00 01 02 03
+	//  11 12 13 10
+	//  22 23 20 21
+	//  23 20 21 22
+
 }
