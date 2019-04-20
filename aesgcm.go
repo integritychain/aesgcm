@@ -29,10 +29,19 @@ var sBox = [16][16]byte{
 	{0x8c, 0xa1, 0x89, 0x0d, 0xbf, 0xe6, 0x42, 0x68, 0x41, 0x99, 0x2d, 0x0f, 0xb0, 0x54, 0xbb, 0x16},
 }
 
-var state [4][4]byte
+func SubBytes(state [4][4]byte) [4][4]byte {
+	for row := 0; row < 4; row++ {
+		for col := 0; col < 4; col++ {
+			var itemRow = state[row][col] >> 4
+			var itemCol = state[row][col] & 0x0f
+			state[row][col] = sBox[itemRow][itemCol]
+		}
+	}
+	return state
+}
 
-// Note: Cipher calls this SubBytes while Key Expansion calls this SubWord; same thing (?)
-func SubBytes(word uint32) uint32 {
+// Note: Key Expansion calls this SubWord
+func SubWord(word uint32) uint32 {
 	var bytes = make([]byte, 4)
 	binary.BigEndian.PutUint32(bytes, word) // byte0->MSB
 	for i := 0; i < 4; i++ {
@@ -65,8 +74,8 @@ func ShiftRows(state [4][4]byte) [4][4]byte {
 	copy(newState[2][0:2], state[2][2:4]) // Row 2
 	copy(newState[2][2:4], state[2][0:2]) // Row 2
 
-	copy(newState[3][0:1], state[2][3:4]) // Row 3
-	copy(newState[3][1:4], state[2][0:3]) // Row 3
+	copy(newState[3][0:1], state[3][3:4]) // Row 3
+	copy(newState[3][1:4], state[3][0:3]) // Row 3
 
 	return newState
 }
@@ -74,8 +83,48 @@ func ShiftRows(state [4][4]byte) [4][4]byte {
 func MixColumns(state [4][4]byte) [4][4]byte {
 	var newState = [4][4]byte{}
 
-	newState[0][0] = (0x02 * state[0][0]) ^ (0x03 * state[0][1]) ^ state[0][2] ^ state[0][3]
+	for col := 0; col < 4; col++ {
+		newState[0][col] = MulMod(0x02, state[0][col]) ^ MulMod(0x03, state[1][col]) ^ state[2][col] ^ state[3][col]
+		newState[1][col] = state[0][col] ^ MulMod(0x02, state[1][col]) ^ MulMod(0x03, state[2][col]) ^ state[3][col]
+		newState[2][col] = state[0][col] ^ state[1][col] ^ MulMod(0x02, state[2][col]) ^ MulMod(0x03, state[3][col])
+		newState[3][col] = MulMod(0x03, state[0][col]) ^ state[1][col] ^ state[2][col] ^ MulMod(0x02, state[3][col])
+	}
 	return newState
+}
+
+func AddRoundKey(state [4][4]byte, round int) [4][4]byte {
+	for col := 0; col < 4; col++ {
+		var colWord uint32
+		colWord = uint32(state[0][col])<<24 + uint32(state[1][col])<<16 + uint32(state[2][col])<<8 + uint32(state[3][col])
+		colWord = colWord ^ w[(round*4)+col]
+		state[0][col] = byte(colWord >> 24)
+		state[1][col] = byte(colWord >> 16)
+		state[2][col] = byte(colWord >> 8)
+		state[3][col] = byte(colWord)
+	}
+	return state
+}
+
+func MulMod(x, y byte) byte {
+	var result uint
+	var runningXt byte
+	runningXt = x
+	for i := uint(0); i < 8; i++ {
+		if y&(1<<i) != 0x00 {
+			result = result ^ uint(runningXt)
+		}
+		runningXt = xtime(runningXt)
+	}
+	return byte(result)
+}
+
+func xtime(x byte) byte {
+	var result uint
+	result = uint(x) << 1
+	if x&(1<<7) != 0 {
+		result = result ^ 0x1b
+	}
+	return byte(result)
 }
 
 func SetKey(key [4]uint32) {
@@ -88,7 +137,7 @@ func ExpandKey() {
 		temp := w[i-1]
 		if i%4 == 0 {
 			rw := RotWord(temp)
-			sw := SubBytes(rw)
+			sw := SubWord(rw)
 			var rc = rcon[(i/4)-1]
 			temp = sw ^ rc
 		}

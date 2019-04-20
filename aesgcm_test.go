@@ -26,9 +26,16 @@ func ExampleRotWord() {
 }
 
 func ExampleSubWord() {
-	var x = SubBytes(initKey[0])
+	var x = SubWord(initKey[0])
 	fmt.Printf("Sub: input %08x  --  output %08x\n", initKey[0], x)
 	// Output: Sub: input 2b7e1516  --  output f1f35947
+}
+
+func ExampleMath() {
+	fmt.Printf("%02x", byte(MulMod(0x49, 0x02)^MulMod(0xdb, 0x03)^0x87^0x3b))
+	fmt.Printf("%02x", byte(MulMod(0xd4, 0x02)^MulMod(0xbf, 0x03)^0x5d^0x30))
+	// Output: 5804
+
 }
 
 func ExampleMixColumns() {
@@ -39,13 +46,47 @@ func ExampleMixColumns() {
 		{0x30, 0xae, 0xf1, 0xe5}}
 	nextState := MixColumns(initState)
 	prettyPrintState(nextState)
+	// Output: 04 e0 48 28
+	//  66 cb f8 06
+	//  81 19 d3 26
+	//  e5 9a 7a 4c
 
-	t0 := (0xd4 * 0x02) % 17
-	t1 := (0xbf * 0x03) % 17
-	t2 := 0x5d
-	t3 := 0x30
-	fmt.Printf("%x", t0^t1^t2^t3)
-	// Output: asdf
+}
+
+func ExampleAddRoundKey() {
+	var initState = [4][4]byte{
+		{0xd4, 0xe0, 0xb8, 0x1e},
+		{0xbf, 0xb4, 0x41, 0x27},
+		{0x5d, 0x52, 0x11, 0x98},
+		{0x30, 0xae, 0xf1, 0xe5}}
+	interState := MixColumns(initState)
+	nextState := AddRoundKey(interState, 1)
+	prettyPrintState(nextState)
+	// Output: a4 68 6b 02
+	//  9c 9f 5b 6a
+	//  7f 35 ea 50
+	//  f2 2b 43 49
+}
+
+func ExampleRound() {
+	SetKey(initKey)
+	ExpandKey()
+	var initState = [4][4]byte{ // Round 1
+		{0x19, 0xa0, 0x9a, 0xe9},
+		{0x3d, 0xf4, 0xc6, 0xf8},
+		{0xe3, 0xe2, 0x8d, 0x48},
+		{0xbe, 0x2b, 0x2a, 0x08},
+	}
+	afterSub := SubBytes(initState)
+	afterShift := ShiftRows(afterSub)
+	afterMix := MixColumns(afterShift)
+	nextState := AddRoundKey(afterMix, 1)
+	prettyPrintState(nextState)
+	// Output: a4 68 6b 02
+	//  9c 9f 5b 6a
+	//  7f 35 ea 50
+	//  f2 2b 43 49
+
 }
 
 var initKey = [4]uint32{0x2b7e1516, 0x28aed2a6, 0xabf71588, 0x09cf4f3c}
@@ -72,6 +113,6 @@ func ExampleShiftRows() {
 	// Output: 00 01 02 03
 	//  11 12 13 10
 	//  22 23 20 21
-	//  23 20 21 22
+	//  33 30 31 32
 
 }
