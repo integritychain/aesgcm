@@ -4,10 +4,24 @@ package aesgcm
 
 import (
 	"encoding/binary"
+	"fmt"
+	"log"
 )
+
+type aesgcm struct {
+	ready bool
+	eKey  [60]uint32 // Expanded key
+	nk    int        // Number of words in key
+	nr    int        // Number of rounds
+	state [4][4]byte // State
+}
 
 // Key schedule
 var w [44]uint32
+
+var state [4][4]byte
+
+var LogFatal = log.Fatalf
 
 // From page 16
 var sBox = [16][16]byte{
@@ -29,19 +43,50 @@ var sBox = [16][16]byte{
 	{0x8c, 0xa1, 0x89, 0x0d, 0xbf, 0xe6, 0x42, 0x68, 0x41, 0x99, 0x2d, 0x0f, 0xb0, 0x54, 0xbb, 0x16},
 }
 
-func SubBytes(state [4][4]byte) [4][4]byte {
-	for row := 0; row < 4; row++ {
-		for col := 0; col < 4; col++ {
-			var itemRow = state[row][col] >> 4
-			var itemCol = state[row][col] & 0x0f
-			state[row][col] = sBox[itemRow][itemCol]
-		}
-	}
-	return state
+func New() *aesgcm {
+	return new(aesgcm)
 }
 
-// Note: Key Expansion calls this SubWord
-func SubWord(word uint32) uint32 {
+func (aesgcm aesgcm) Init(key []byte) aesgcm {
+	aesgcm.nk = len(key) / 4
+	if (aesgcm.nk != 4) && (aesgcm.nk != 6) && (aesgcm.nk != 8) {
+		LogFatal("Key length must be 128, 192 or 256 bits")
+	}
+	rcon := [11]uint32{0, 0x01000000, 0x02000000, 0x04000000, 0x08000000, 0x10000000, 0x20000000, 0x40000000, 0x80000000, 0x1b000000, 0x36000000}
+	aesgcm.nr = [9]int{0, 0, 0, 0, 44, 0, 52, 0, 60}[aesgcm.nk]
+
+	for index := 0; index < aesgcm.nk; index++ {
+		aesgcm.eKey[index] = uint32(key[index*4])<<24 | uint32(key[index*4+1])<<16 |
+			uint32(key[index*4+2])<<8 | uint32(key[index*4+3])
+	}
+
+	for index := aesgcm.nk; index < aesgcm.nr; index++ {
+		temp := aesgcm.eKey[index-1]
+		if index%aesgcm.nk == 0 {
+			rw := rotWord(temp)
+			sw := subWord(rw)
+			var rc = rcon[index/aesgcm.nk]
+			temp = sw ^ rc
+		} else if aesgcm.nk > 6 && index%aesgcm.nk == 4 {
+			temp = subWord(temp)
+		}
+		aesgcm.eKey[index] = aesgcm.eKey[index-aesgcm.nk] ^ temp
+	}
+
+	return aesgcm
+}
+
+func rotWord(word uint32) uint32 { // Key expansion
+	var bytes1 = make([]byte, 4)
+	binary.BigEndian.PutUint32(bytes1, word) // byte0->MSB
+	var bytes2 = make([]byte, 4)
+	copy(bytes2[0:3], bytes1[1:4])
+	bytes2[3] = bytes1[0]
+	var x = binary.BigEndian.Uint32(bytes2)
+	return x
+}
+
+func subWord(word uint32) uint32 { // Key expansion
 	var bytes = make([]byte, 4)
 	binary.BigEndian.PutUint32(bytes, word) // byte0->MSB
 	for i := 0; i < 4; i++ {
@@ -53,8 +98,53 @@ func SubWord(word uint32) uint32 {
 	return x
 }
 
-// Note: Key Expansion calls this RotWord; same thing (?)
-func RotWord(word uint32) uint32 {
+func prettyPrintState() {
+	for i := 0; i < 4; i++ {
+		fmt.Printf(" %02x %02x %02x %02x\n", state[i][0], state[i][1], state[i][2], state[i][3])
+	}
+}
+
+func Encrypt(data [4][4]byte, key [4]uint32) [4][4]byte {
+	SetKey(key)
+	ExpandKey()
+	state = data
+	AddRoundKey(0)
+	for round := 1; round < 11; round++ {
+		SubBytes()
+		ShiftRows()
+		if round != 10 {
+			MixColumns()
+		}
+		AddRoundKey(round)
+		//fmt.Printf("\nEnd of round %v\n", round)
+		//prettyPrintState()
+	}
+	return state
+}
+
+func SubBytes() { // Round cipher
+	for row := 0; row < 4; row++ {
+		for col := 0; col < 4; col++ {
+			var itemRow = state[row][col] >> 4
+			var itemCol = state[row][col] & 0x0f
+			state[row][col] = sBox[itemRow][itemCol]
+		}
+	}
+}
+
+func SubWord(word uint32) uint32 { // Key expansion
+	var bytes = make([]byte, 4)
+	binary.BigEndian.PutUint32(bytes, word) // byte0->MSB
+	for i := 0; i < 4; i++ {
+		var row = bytes[i] >> 4
+		var col = bytes[i] & 0x0f
+		bytes[i] = sBox[row][col]
+	}
+	var x = binary.BigEndian.Uint32(bytes)
+	return x
+}
+
+func RotWord(word uint32) uint32 { // Key expansion
 	var bytes1 = make([]byte, 4)
 	binary.BigEndian.PutUint32(bytes1, word) // byte0->MSB
 	var bytes2 = make([]byte, 4)
@@ -64,7 +154,7 @@ func RotWord(word uint32) uint32 {
 	return x
 }
 
-func ShiftRows(state [4][4]byte) [4][4]byte {
+func ShiftRows() {
 	var newState = [4][4]byte{}
 	copy(newState[0][0:4], state[0][0:4]) // Row 0 is unchanged
 
@@ -77,10 +167,10 @@ func ShiftRows(state [4][4]byte) [4][4]byte {
 	copy(newState[3][0:1], state[3][3:4]) // Row 3
 	copy(newState[3][1:4], state[3][0:3]) // Row 3
 
-	return newState
+	state = newState
 }
 
-func MixColumns(state [4][4]byte) [4][4]byte {
+func MixColumns() {
 	var newState = [4][4]byte{}
 
 	for col := 0; col < 4; col++ {
@@ -89,10 +179,10 @@ func MixColumns(state [4][4]byte) [4][4]byte {
 		newState[2][col] = state[0][col] ^ state[1][col] ^ MulMod(0x02, state[2][col]) ^ MulMod(0x03, state[3][col])
 		newState[3][col] = MulMod(0x03, state[0][col]) ^ state[1][col] ^ state[2][col] ^ MulMod(0x02, state[3][col])
 	}
-	return newState
+	state = newState
 }
 
-func AddRoundKey(state [4][4]byte, round int) [4][4]byte {
+func AddRoundKey(round int) {
 	for col := 0; col < 4; col++ {
 		var colWord uint32
 		colWord = uint32(state[0][col])<<24 + uint32(state[1][col])<<16 + uint32(state[2][col])<<8 + uint32(state[3][col])
@@ -102,7 +192,6 @@ func AddRoundKey(state [4][4]byte, round int) [4][4]byte {
 		state[2][col] = byte(colWord >> 8)
 		state[3][col] = byte(colWord)
 	}
-	return state
 }
 
 func MulMod(x, y byte) byte {
