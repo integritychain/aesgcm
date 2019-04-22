@@ -4,7 +4,6 @@ package aesgcm
 
 import (
 	"encoding/binary"
-	"fmt"
 	"log"
 )
 
@@ -47,20 +46,20 @@ func New() *aesgcm {
 	return new(aesgcm)
 }
 
-func (aesgcm aesgcm) Init(key []byte) aesgcm {
+func (aesgcm *aesgcm) Key(key []byte) *aesgcm {
 	aesgcm.nk = len(key) / 4
 	if (aesgcm.nk != 4) && (aesgcm.nk != 6) && (aesgcm.nk != 8) {
 		LogFatal("Key length must be 128, 192 or 256 bits")
 	}
 	rcon := [11]uint32{0, 0x01000000, 0x02000000, 0x04000000, 0x08000000, 0x10000000, 0x20000000, 0x40000000, 0x80000000, 0x1b000000, 0x36000000}
-	aesgcm.nr = [9]int{0, 0, 0, 0, 44, 0, 52, 0, 60}[aesgcm.nk]
+	aesgcm.nr = [9]int{0, 0, 0, 0, 10, 0, 12, 0, 14}[aesgcm.nk]
 
 	for index := 0; index < aesgcm.nk; index++ {
 		aesgcm.eKey[index] = uint32(key[index*4])<<24 | uint32(key[index*4+1])<<16 |
 			uint32(key[index*4+2])<<8 | uint32(key[index*4+3])
 	}
 
-	for index := aesgcm.nk; index < aesgcm.nr; index++ {
+	for index := aesgcm.nk; index < (aesgcm.nr+1)*4; index++ {
 		temp := aesgcm.eKey[index-1]
 		if index%aesgcm.nk == 0 {
 			rw := rotWord(temp)
@@ -73,6 +72,7 @@ func (aesgcm aesgcm) Init(key []byte) aesgcm {
 		aesgcm.eKey[index] = aesgcm.eKey[index-aesgcm.nk] ^ temp
 	}
 
+	aesgcm.ready = true
 	return aesgcm
 }
 
@@ -98,103 +98,89 @@ func subWord(word uint32) uint32 { // Key expansion
 	return x
 }
 
-func prettyPrintState() {
-	for i := 0; i < 4; i++ {
-		fmt.Printf(" %02x %02x %02x %02x\n", state[i][0], state[i][1], state[i][2], state[i][3])
+func (aesgcm *aesgcm) Encrypt(message []byte) []byte {
+	if !aesgcm.ready {
+		LogFatal("The key must be set prior to encrypting data")
 	}
-}
-
-func Encrypt(data [4][4]byte, key [4]uint32) [4][4]byte {
-	SetKey(key)
-	ExpandKey()
-	state = data
-	AddRoundKey(0)
-	for round := 1; round < 11; round++ {
-		SubBytes()
-		ShiftRows()
-		if round != 10 {
-			MixColumns()
-		}
-		AddRoundKey(round)
-		//fmt.Printf("\nEnd of round %v\n", round)
-		//prettyPrintState()
+	if len(message) == 64 {
+		LogFatal("Encryption currently only works for a single block")
 	}
-	return state
-}
+	var cipherText = make([]byte, 16)
 
-func SubBytes() { // Round cipher
 	for row := 0; row < 4; row++ {
 		for col := 0; col < 4; col++ {
-			var itemRow = state[row][col] >> 4
-			var itemCol = state[row][col] & 0x0f
-			state[row][col] = sBox[itemRow][itemCol]
+			aesgcm.state[row][col] = message[col*4+row]
+		}
+	}
+	aesgcm.addRoundKey(0)
+	for round := 1; round < aesgcm.nr+1; round++ {
+		aesgcm.subBytes()
+		aesgcm.shiftRows()
+		if round != aesgcm.nr {
+			aesgcm.mixColumns()
+		}
+		aesgcm.addRoundKey(round)
+	}
+
+	for row := 0; row < 4; row++ {
+		for col := 0; col < 4; col++ {
+			cipherText[col*4+row] = aesgcm.state[row][col]
+		}
+	}
+	return cipherText
+}
+
+func (aesgcm *aesgcm) addRoundKey(round int) {
+	for col := 0; col < 4; col++ {
+		var colWord uint32
+		colWord = uint32(aesgcm.state[0][col])<<24 + uint32(aesgcm.state[1][col])<<16 + uint32(aesgcm.state[2][col])<<8 + uint32(aesgcm.state[3][col])
+		colWord = colWord ^ aesgcm.eKey[(round*4)+col]
+		aesgcm.state[0][col] = byte(colWord >> 24)
+		aesgcm.state[1][col] = byte(colWord >> 16)
+		aesgcm.state[2][col] = byte(colWord >> 8)
+		aesgcm.state[3][col] = byte(colWord)
+	}
+}
+
+func (aesgcm *aesgcm) subBytes() { // Round cipher
+	for row := 0; row < 4; row++ {
+		for col := 0; col < 4; col++ {
+			var itemRow = aesgcm.state[row][col] >> 4
+			var itemCol = aesgcm.state[row][col] & 0x0f
+			aesgcm.state[row][col] = sBox[itemRow][itemCol]
 		}
 	}
 }
 
-func SubWord(word uint32) uint32 { // Key expansion
-	var bytes = make([]byte, 4)
-	binary.BigEndian.PutUint32(bytes, word) // byte0->MSB
-	for i := 0; i < 4; i++ {
-		var row = bytes[i] >> 4
-		var col = bytes[i] & 0x0f
-		bytes[i] = sBox[row][col]
-	}
-	var x = binary.BigEndian.Uint32(bytes)
-	return x
-}
-
-func RotWord(word uint32) uint32 { // Key expansion
-	var bytes1 = make([]byte, 4)
-	binary.BigEndian.PutUint32(bytes1, word) // byte0->MSB
-	var bytes2 = make([]byte, 4)
-	copy(bytes2[0:3], bytes1[1:4])
-	bytes2[3] = bytes1[0]
-	var x = binary.BigEndian.Uint32(bytes2)
-	return x
-}
-
-func ShiftRows() {
+func (aesgcm *aesgcm) shiftRows() {
 	var newState = [4][4]byte{}
-	copy(newState[0][0:4], state[0][0:4]) // Row 0 is unchanged
+	copy(newState[0][0:4], aesgcm.state[0][0:4]) // Row 0 is unchanged
 
-	copy(newState[1][0:3], state[1][1:4]) // Row 1
-	copy(newState[1][3:4], state[1][0:1]) // Row 1
+	copy(newState[1][0:3], aesgcm.state[1][1:4]) // Row 1
+	copy(newState[1][3:4], aesgcm.state[1][0:1]) // Row 1
 
-	copy(newState[2][0:2], state[2][2:4]) // Row 2
-	copy(newState[2][2:4], state[2][0:2]) // Row 2
+	copy(newState[2][0:2], aesgcm.state[2][2:4]) // Row 2
+	copy(newState[2][2:4], aesgcm.state[2][0:2]) // Row 2
 
-	copy(newState[3][0:1], state[3][3:4]) // Row 3
-	copy(newState[3][1:4], state[3][0:3]) // Row 3
+	copy(newState[3][0:1], aesgcm.state[3][3:4]) // Row 3
+	copy(newState[3][1:4], aesgcm.state[3][0:3]) // Row 3
 
-	state = newState
+	aesgcm.state = newState
 }
 
-func MixColumns() {
+func (aesgcm *aesgcm) mixColumns() {
 	var newState = [4][4]byte{}
 
 	for col := 0; col < 4; col++ {
-		newState[0][col] = MulMod(0x02, state[0][col]) ^ MulMod(0x03, state[1][col]) ^ state[2][col] ^ state[3][col]
-		newState[1][col] = state[0][col] ^ MulMod(0x02, state[1][col]) ^ MulMod(0x03, state[2][col]) ^ state[3][col]
-		newState[2][col] = state[0][col] ^ state[1][col] ^ MulMod(0x02, state[2][col]) ^ MulMod(0x03, state[3][col])
-		newState[3][col] = MulMod(0x03, state[0][col]) ^ state[1][col] ^ state[2][col] ^ MulMod(0x02, state[3][col])
+		newState[0][col] = mulMod(0x02, aesgcm.state[0][col]) ^ mulMod(0x03, aesgcm.state[1][col]) ^ aesgcm.state[2][col] ^ aesgcm.state[3][col]
+		newState[1][col] = aesgcm.state[0][col] ^ mulMod(0x02, aesgcm.state[1][col]) ^ mulMod(0x03, aesgcm.state[2][col]) ^ aesgcm.state[3][col]
+		newState[2][col] = aesgcm.state[0][col] ^ aesgcm.state[1][col] ^ mulMod(0x02, aesgcm.state[2][col]) ^ mulMod(0x03, aesgcm.state[3][col])
+		newState[3][col] = mulMod(0x03, aesgcm.state[0][col]) ^ aesgcm.state[1][col] ^ aesgcm.state[2][col] ^ mulMod(0x02, aesgcm.state[3][col])
 	}
-	state = newState
+	aesgcm.state = newState
 }
 
-func AddRoundKey(round int) {
-	for col := 0; col < 4; col++ {
-		var colWord uint32
-		colWord = uint32(state[0][col])<<24 + uint32(state[1][col])<<16 + uint32(state[2][col])<<8 + uint32(state[3][col])
-		colWord = colWord ^ w[(round*4)+col]
-		state[0][col] = byte(colWord >> 24)
-		state[1][col] = byte(colWord >> 16)
-		state[2][col] = byte(colWord >> 8)
-		state[3][col] = byte(colWord)
-	}
-}
-
-func MulMod(x, y byte) byte {
+func mulMod(x, y byte) byte {
 	var result uint
 	var runningXt byte
 	runningXt = x
@@ -214,22 +200,4 @@ func xtime(x byte) byte {
 		result = result ^ 0x1b
 	}
 	return byte(result)
-}
-
-func SetKey(key [4]uint32) {
-	copy(w[0:4], key[0:4])
-}
-
-func ExpandKey() {
-	rcon := [10]uint32{0x01000000, 0x02000000, 0x04000000, 0x08000000, 0x10000000, 0x20000000, 0x40000000, 0x80000000, 0x1b000000, 0x36000000}
-	for i := uint32(4); i < 44; i++ {
-		temp := w[i-1]
-		if i%4 == 0 {
-			rw := RotWord(temp)
-			sw := SubWord(rw)
-			var rc = rcon[(i/4)-1]
-			temp = sw ^ rc
-		}
-		w[i] = w[i-4] ^ temp
-	}
 }
