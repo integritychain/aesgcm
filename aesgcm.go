@@ -149,6 +149,41 @@ func (aesgcm *aesgcm) Encrypt(message []byte) []byte {
 	return cipherText
 }
 
+func (aesgcm *aesgcm) Decrypt(message []byte) []byte {
+	if !aesgcm.ready {
+		LogFatal("The key must be set prior to decrypting data")
+	}
+	if len(message) == 64 {
+		LogFatal("Decryption currently only works for a single block")
+	}
+	var plainText = make([]byte, 16)
+
+	for row := 0; row < 4; row++ {
+		for col := 0; col < 4; col++ {
+			aesgcm.state[row][col] = message[col*4+row]
+		}
+	}
+	aesgcm.addRoundKey(aesgcm.nr + 1)
+	for round := aesgcm.nr; round > 1; round-- {
+		aesgcm.invShiftRows()
+		aesgcm.invSubBytes()
+		aesgcm.addRoundKey(round)
+		if round != aesgcm.nr {
+			aesgcm.invMixColumns()
+		}
+	}
+	aesgcm.invShiftRows()
+	aesgcm.invSubBytes()
+	aesgcm.addRoundKey(0)
+
+	for row := 0; row < 4; row++ {
+		for col := 0; col < 4; col++ {
+			plainText[col*4+row] = aesgcm.state[row][col]
+		}
+	}
+	return plainText
+}
+
 func (aesgcm *aesgcm) addRoundKey(round int) {
 	for col := 0; col < 4; col++ {
 		var colWord uint32
@@ -221,6 +256,18 @@ func (aesgcm *aesgcm) mixColumns() {
 		newState[1][col] = aesgcm.state[0][col] ^ mulMod(0x02, aesgcm.state[1][col]) ^ mulMod(0x03, aesgcm.state[2][col]) ^ aesgcm.state[3][col]
 		newState[2][col] = aesgcm.state[0][col] ^ aesgcm.state[1][col] ^ mulMod(0x02, aesgcm.state[2][col]) ^ mulMod(0x03, aesgcm.state[3][col])
 		newState[3][col] = mulMod(0x03, aesgcm.state[0][col]) ^ aesgcm.state[1][col] ^ aesgcm.state[2][col] ^ mulMod(0x02, aesgcm.state[3][col])
+	}
+	aesgcm.state = newState
+}
+
+func (aesgcm *aesgcm) invMixColumns() {
+	var newState = [4][4]byte{}
+
+	for col := 0; col < 4; col++ {
+		newState[0][col] = mulMod(0x0e, aesgcm.state[0][col]) ^ mulMod(0x0b, aesgcm.state[1][col]) ^ mulMod(0x0d, aesgcm.state[2][col]) ^ mulMod(0x09, aesgcm.state[3][col])
+		newState[1][col] = mulMod(0x09, aesgcm.state[0][col]) ^ mulMod(0x0e, aesgcm.state[1][col]) ^ mulMod(0x0b, aesgcm.state[2][col]) ^ mulMod(0x0d, aesgcm.state[3][col])
+		newState[2][col] = mulMod(0x0d, aesgcm.state[0][col]) ^ mulMod(0x09, aesgcm.state[1][col]) ^ mulMod(0x0e, aesgcm.state[2][col]) ^ mulMod(0x0b, aesgcm.state[3][col])
+		newState[3][col] = mulMod(0x0b, aesgcm.state[0][col]) ^ mulMod(0x0d, aesgcm.state[1][col]) ^ mulMod(0x09, aesgcm.state[2][col]) ^ mulMod(0x0e, aesgcm.state[3][col])
 	}
 	aesgcm.state = newState
 }
