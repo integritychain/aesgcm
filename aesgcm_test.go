@@ -8,7 +8,7 @@ import (
 
 // TODO
 // 1. Test xtime and mulmod; annotate appedix C in cipher check; check test coverage
-// 2. Implement inverse cipher (and key expansion?)
+// 3. Implement inverse cipher (and key expansion?)
 
 //
 // Utils
@@ -75,7 +75,20 @@ func ExampleNewKey256() {
 // Cipher internals - Appendix B
 //
 
-////////////////////// Test xtime and mulMod here/////////////////////
+func Example_xtime() { // Section 4.2.1
+	var r1 = xtime(0x57) // = {ae}
+	var r2 = xtime(0xae) // = {47}
+	var r3 = xtime(0x47) // = {8e}
+	var r4 = xtime(0x8e) // = {07},
+	fmt.Printf("%02x %02x %02x %02x", r1, r2, r3, r4)
+	// Output: ae 47 8e 07
+}
+
+func Example_mulMod() { // Section 4.2
+	var r1 = mulMod(0x57, 0x83)
+	fmt.Printf("%02x", r1)
+	// Output: c1
+}
 
 func Example_subBytes() {
 	var instance = new(aesgcm)
@@ -88,6 +101,17 @@ func Example_subBytes() {
 	//  ae f1 e5 30
 }
 
+func Example_invSubBytes() {
+	var instance = new(aesgcm)
+	instance.state = [4][4]byte{{0xd4, 0xe0, 0xb8, 0x1e}, {0x27, 0xbf, 0xb4, 0x41}, {0x11, 0x98, 0x5d, 0x52}, {0xae, 0xf1, 0xe5, 0x30}}
+	instance.invSubBytes()
+	prettyPrintState(instance)
+	// Output: 19 a0 9a e9
+	//  3d f4 c6 f8
+	//  e3 e2 8d 48
+	//  be 2b 2a 08
+}
+
 func Example_shiftRows() {
 	var instance = new(aesgcm)
 	instance.state = [4][4]byte{{0xd4, 0xe0, 0xb8, 0x1e}, {0x27, 0xbf, 0xb4, 0x41}, {0x11, 0x98, 0x5d, 0x52}, {0xae, 0xf1, 0xe5, 0x30}}
@@ -97,6 +121,17 @@ func Example_shiftRows() {
 	//  bf b4 41 27
 	//  5d 52 11 98
 	//  30 ae f1 e5
+}
+
+func Example_invShiftRows() {
+	var instance = new(aesgcm)
+	instance.state = [4][4]byte{{0xd4, 0xe0, 0xb8, 0x1e}, {0xbf, 0xb4, 0x41, 0x27}, {0x5d, 0x52, 0x11, 0x98}, {0x30, 0xae, 0xf1, 0xe5}}
+	instance.invShiftRows()
+	prettyPrintState(instance)
+	// Output: d4 e0 b8 1e
+	//  27 bf b4 41
+	//  11 98 5d 52
+	//  ae f1 e5 30
 }
 
 func Example_mixColumns() {
@@ -148,4 +183,18 @@ func ExampleAesgcm_Encrypt256() {
 		0xbb, 0xcc, 0xdd, 0xee, 0xff})
 	fmt.Printf("%x", result)
 	// Output: 8ea2b7ca516745bfeafc49904b496089
+}
+
+func TestRoundTrips(t *testing.T) {
+	for row := 0; row < 4; row++ {
+		for col := 0; col < 4; col++ {
+			var x = sBox[row][col]
+			var xRow = x >> 4
+			var xCol = x & 0x0f
+			var y = invSBox[xRow][xCol]
+			var z = uint32(row<<4 + col)
+			assertEquals(t, z, uint32(y), fmt.Sprintf("X %02x != %02xy", x, y))
+		}
+	}
+
 }
