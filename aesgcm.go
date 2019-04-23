@@ -163,12 +163,12 @@ func (aesgcm *aesgcm) Decrypt(message []byte) []byte {
 			aesgcm.state[row][col] = message[col*4+row]
 		}
 	}
-	aesgcm.addRoundKey(aesgcm.nr + 1)
-	for round := aesgcm.nr; round > 1; round-- {
+	aesgcm.addRoundKey(aesgcm.nr)
+	for round := aesgcm.nr - 1; round > 0; round-- {
 		aesgcm.invShiftRows()
 		aesgcm.invSubBytes()
 		aesgcm.addRoundKey(round)
-		if round != aesgcm.nr {
+		if round != aesgcm.nr { // ????????????
 			aesgcm.invMixColumns()
 		}
 	}
