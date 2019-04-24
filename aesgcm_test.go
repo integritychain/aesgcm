@@ -6,6 +6,22 @@ import (
 	"testing"
 )
 
+func Test_add12(t *testing.T) {
+	var result = add12(1, 3)
+	assertEqualsUint32(t, 6, result, "go girl")
+}
+
+// See https://stackoverflow.com/questions/10655026/gcm-multiplication-implementation
+func Test_algorithm1(t *testing.T) {
+	var instance = New().Key([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+	res := instance.Encrypt([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+	var state = fmt.Sprintf("H0=%x", res)
+	var result1 = algorithm1(bWord{0x0F, 0x100}, bWord{0x12, 0x23})
+	var result2 = algorithm1(bWord{0x12, 0x23}, bWord{0x0F, 0x100})
+	assertEqualsUint64(t, result1.msb, result2.msb, state)
+	assertEqualsUint64(t, result1.lsb, result2.lsb, "wow - lsb")
+}
+
 // TODO
 // 1. Annotate data sources (e.g. Appendix X.Y.Z); Revise Example->Test/Check; ----> Hit ~100% test coverage
 // 2. Implement trivial benchmark for first data point
@@ -13,6 +29,13 @@ import (
 //
 // Testing utils
 //
+
+func assertEqualsUint64(t *testing.T, expected uint64, actual uint64, message interface{}) {
+	if expected != actual {
+		t.Error(fmt.Sprintf("Expected %v,\n    got %v\n %v", expected, actual, message))
+		t.Logf(string(debug.Stack()))
+	}
+}
 
 func assertEqualsUint32(t *testing.T, expected uint32, actual uint32, message interface{}) {
 	if expected != actual {
