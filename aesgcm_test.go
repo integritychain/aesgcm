@@ -2,24 +2,51 @@ package aesgcm
 
 import (
 	"fmt"
+	"math/rand"
 	"runtime/debug"
 	"testing"
 )
 
-func Test_add12(t *testing.T) {
-	var result = add12(1, 3)
-	assertEqualsUint32(t, 6, result, "go girl")
-}
+//var instance = New().Key([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+//res := instance.Encrypt([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+//var state = fmt.Sprintf("H0=%x", res)
+
+// Create table tests for H and inc
 
 // See https://stackoverflow.com/questions/10655026/gcm-multiplication-implementation
 func Test_algorithm1(t *testing.T) {
-	var instance = New().Key([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
-	res := instance.Encrypt([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
-	var state = fmt.Sprintf("H0=%x", res)
-	var result1 = algorithm1(bWord{0x0F, 0x100}, bWord{0x12, 0x23})
-	var result2 = algorithm1(bWord{0x12, 0x23}, bWord{0x0F, 0x100})
-	assertEqualsUint64(t, result1.msb, result2.msb, state)
-	assertEqualsUint64(t, result1.lsb, result2.lsb, "wow - lsb")
+
+	//var multTests = []struct {
+	//	operandA  bWord
+	//	operandB bWord
+	//	expectedH string
+	//}{
+	//	{bWord{0xfedcba9876543210, 0xfedcba9876543210}, bWord{0xfedcba9876543210, 0xfedcba9876543210}, "N/A"},
+	//	{bWord{0xfedcba9876543210, 0xfedcba9876543210}, bWord{0xfedcba9876543210, 0xfedcba9876543210}, "N/A"},
+	//}
+
+	// Multiplication should be associative
+	for index := 0; index < 100000; index++ {
+		operandA := bWord{rand.Uint64(), rand.Uint64()}
+		operandB := bWord{rand.Uint64(), rand.Uint64()}
+		result1 := algorithm1(operandA, operandB)
+		result2 := algorithm1(operandB, operandA)
+		assertEqualsUint64(t, result1.left, result2.left, "left went bad")
+		assertEqualsUint64(t, result1.right, result2.right, "right went bad")
+	}
+}
+
+func Test_incM32(t *testing.T) {
+	var result1 = incM32(bWord{0xFEDCBA9876543210, 0xFEDCBA9876543210})
+	var r1 = fmt.Sprintf("%x", result1)
+	assertEqualsString(t, "{fedcba9876543210 fedcba9876543211}", r1, "hmmm")
+	var result2 = incM32(bWord{0xFEDCBA9876543210, 0xFEDCBA98EFFFFFFF})
+	var r2 = fmt.Sprintf("%x", result2)
+	assertEqualsString(t, "{fedcba9876543210 fedcba98f0000000}", r2, "hmmm")
+	var result3 = incM32(bWord{0xFEDCBA9876543210, 0xFEDCBA98FFFFFFFF})
+	var r3 = fmt.Sprintf("%x", result3)
+	assertEqualsString(t, "{fedcba9876543210 fedcba9800000000}", r3, "hmmm")
+
 }
 
 // TODO
@@ -32,8 +59,8 @@ func Test_algorithm1(t *testing.T) {
 
 func assertEqualsUint64(t *testing.T, expected uint64, actual uint64, message interface{}) {
 	if expected != actual {
-		t.Error(fmt.Sprintf("Expected %v,\n    got %v\n %v", expected, actual, message))
-		t.Logf(string(debug.Stack()))
+		t.Error(fmt.Sprintf("Expected %v, Got %v --> %v", expected, actual, message))
+		//t.Logf(string(debug.Stack()))
 	}
 }
 
