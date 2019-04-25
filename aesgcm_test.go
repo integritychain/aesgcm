@@ -7,11 +7,25 @@ import (
 	"testing"
 )
 
-//var instance = New().Key([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
-//res := instance.Encrypt([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
-//var state = fmt.Sprintf("H0=%x", res)
-
 // Create table tests for H and inc
+
+func Example_eKY0() {
+	eKY0()
+	// Output: asdf
+}
+
+func Test_genICB(t *testing.T) { // Called Y0 in "revised spec testcases"
+	genICB([3]uint32{0xcafebabe, 0xfacedbad, 0xdecaf888})
+	var res = fmt.Sprintf("%x", icb)
+	assertEqualsString(t, "{cafebabefacedbad decaf88800000001}", res, "blah")
+
+}
+
+func Test_initH(t *testing.T) {
+	initH([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+	var res = fmt.Sprintf("%x", H)
+	assertEqualsString(t, "{66e94bd4ef8a2c3 884cfa59ca342b2e}", res, "blah")
+}
 
 // See https://stackoverflow.com/questions/10655026/gcm-multiplication-implementation
 func Test_algorithm1(t *testing.T) {
@@ -29,8 +43,8 @@ func Test_algorithm1(t *testing.T) {
 	for index := 0; index < 100000; index++ {
 		operandA := bWord{rand.Uint64(), rand.Uint64()}
 		operandB := bWord{rand.Uint64(), rand.Uint64()}
-		result1 := algorithm1(operandA, operandB)
-		result2 := algorithm1(operandB, operandA)
+		result1 := xMuly(operandA, operandB)
+		result2 := xMuly(operandB, operandA)
 		assertEqualsUint64(t, result1.left, result2.left, "left went bad")
 		assertEqualsUint64(t, result1.right, result2.right, "right went bad")
 	}
