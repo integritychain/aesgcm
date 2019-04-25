@@ -64,11 +64,11 @@ func initH(key []byte) {
 	//fmt.Println(state)
 	left, err := strconv.ParseUint(state[0:15], 16, 64)
 	if err != nil {
-		LogFatal("Prob 1")
+		panic("Prob 1")
 	}
 	right, err := strconv.ParseUint(state[16:32], 16, 64)
 	if err != nil {
-		LogFatal("Prob 2")
+		panic("Prob 2")
 	}
 	H.left, H.right = left, right
 }
