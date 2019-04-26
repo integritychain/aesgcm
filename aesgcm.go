@@ -1,7 +1,6 @@
 package aesgcm
 
 import (
-	"crypto/cipher"
 	"crypto/rand"
 	"io"
 )
@@ -20,10 +19,13 @@ const (
 )
 
 // NewAESGCM returns an instance of the simplest, strongest and fastest cipher configuration
-// Internally generated 96 bit nonce, AES 256 and 128-bit tag
-func NewAESGCM(key []byte) cipher.AEAD {
+// Internally generate 96-bit nonce, require 256-bit AES key and return 128-bit tag
+func NewAESGCM(key []byte) *aesgcm {
+	if len(key) != 32 {
+		panic("Key length must be 32-bytes (256-bits)")
+	}
 	var newAESGCM = new(aesgcm)
-	newAESGCM.state[0][0] = key[0] // BAAAD
+	newAESGCM.Key(key)
 	return newAESGCM
 }
 

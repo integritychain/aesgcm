@@ -7,6 +7,14 @@ import (
 	"testing"
 )
 
+func TestNewAESGCM(t *testing.T) {
+	var key = []byte{0x60, 0x3d, 0xeb, 0x10, 0x15, 0xca, 0x71, 0xbe, 0x2b, 0x73, 0xae,
+		0xf0, 0x85, 0x7d, 0x77, 0x81, 0x1f, 0x35, 0x2c, 0x07, 0x3b, 0x61, 0x08, 0xd7, 0x2d, 0x98, 0x10,
+		0xa3, 0x09, 0x14, 0xdf, 0xf4}
+	var instance = NewAESGCM(key)
+	assertEqualsUint32(t, 0x706c631e, instance.eKey[59], "Bad eKey[59]")
+}
+
 // Create table tests for H and inc
 
 func Example_eKY0() {
@@ -39,7 +47,7 @@ func Test_algorithm1(t *testing.T) {
 	//	{bWord{0xfedcba9876543210, 0xfedcba9876543210}, bWord{0xfedcba9876543210, 0xfedcba9876543210}, "N/A"},
 	//}
 
-	// Multiplication should be associative
+	// Multiplication should be commutative
 	for index := 0; index < 100000; index++ {
 		operandA := bWord{rand.Uint64(), rand.Uint64()}
 		operandB := bWord{rand.Uint64(), rand.Uint64()}
