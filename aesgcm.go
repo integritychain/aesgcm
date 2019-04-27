@@ -3,17 +3,21 @@ package aesgcm
 import (
 	"crypto/rand"
 	"encoding/binary"
+	"fmt"
 	"io"
 )
 
 type aesgcm struct {
-	ready bool
-	eKey  [60]uint32 // Expanded key
-	nk    int        // Number of words in key
-	nr    int        // Number of rounds
-	state [4][4]byte // State
-	h     bWord
-	icb   bWord
+	ready      bool
+	eKey       [60]uint32 // Expanded key
+	nk         int        // Number of words in key
+	nr         int        // Number of rounds
+	state      [4][4]byte // State
+	h          bWord
+	icb        bWord
+	eky0       bWord
+	lenAlenC   bWord
+	runningTag bWord
 }
 
 const (
@@ -31,6 +35,7 @@ func NewAESGCM(key []byte, nonce [3]uint32) *aesgcm {
 	newAESGCM.key(key)
 	newAESGCM.initH(key)
 	newAESGCM.genICB(nonce)
+	newAESGCM.calcEky0()
 	return newAESGCM
 }
 
@@ -46,24 +51,32 @@ func (aesgcm aesgcm) Overhead() int {
 
 func (aesgcm *aesgcm) Seal(dst, nonce, plaintext, additionalData []byte) []byte { // What does this return????
 	// Ultimately push a bunch of this into gcm.go
-	var cipher = make([]byte, len(plaintext))
+	aesgcm.lenAlenC.left = uint64(len(additionalData)) * 8
+	aesgcm.lenAlenC.right = uint64(len(plaintext)) * 8
+	var cipher = make([]byte, len(plaintext)+len(plaintext)%16)
 	var index = 0
 
-	for len(plaintext) >= index {
+	for len(plaintext) > index {
 
 		aesgcm.icb = incM32(aesgcm.icb)
 		var xx = make([]byte, 16)
 
 		binary.BigEndian.PutUint64(xx[0:8], aesgcm.icb.left)
 		binary.BigEndian.PutUint64(xx[8:16], aesgcm.icb.right)
-		var result = aesgcm.Encrypt(xx)
+		var result = aesgcm.encrypt(xx)
 		for i := 0; i < min(16, len(plaintext)-index); i++ {
 			cipher[i+index] = plaintext[i+index] ^ result[i]
 		}
+		var bC = bytes2bWord(cipher[index : index+16])
+		var X = bXor(aesgcm.runningTag, bC)
+		aesgcm.runningTag = xMuly(X, aesgcm.h)
 		index += 16
 	}
 
-	return cipher
+	aesgcm.runningTag = xMuly(bXor(aesgcm.runningTag, aesgcm.lenAlenC), aesgcm.h)
+	aesgcm.runningTag = bXor(aesgcm.runningTag, aesgcm.eky0)
+	fmt.Printf("tag: %x", aesgcm.runningTag)
+	return cipher[0:len(plaintext)]
 }
 
 // Generate nonce, encrypt plaintext and authenticate additional data

@@ -62,10 +62,10 @@ func xMuly(x, y bWord) bWord {
 }
 
 func (aesgcm *aesgcm) initH(key []byte) *aesgcm {
-	res := aesgcm.Encrypt([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+	res := aesgcm.encrypt([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 	var state = fmt.Sprintf("%32x", res)
 	//fmt.Println(state)
-	left, err := strconv.ParseUint(state[0:15], 16, 64)
+	left, err := strconv.ParseUint(state[0:16], 16, 64)
 	if err != nil {
 		panic("Prob 1")
 	}
@@ -103,10 +103,21 @@ func bWord2Bytes(x bWord) []byte {
 	return b
 }
 
+func bytes2bWord(x []byte) bWord {
+	var result bWord
+	result.left = binary.BigEndian.Uint64(x[0:8])
+	result.right = binary.BigEndian.Uint64(x[8:16])
+	return result
+}
+
 func incM32(x bWord) bWord {
 	var z bWord
 	z.left = x.left
 	var inc = uint32(x.right + 1) // chop off lower right side and increment
 	z.right = (x.right & 0xffffffff00000000) | uint64(inc)
 	return z
+}
+
+func (aesgcm *aesgcm) calcEky0() {
+	aesgcm.eky0 = bytes2bWord(aesgcm.encrypt(bWord2Bytes(aesgcm.icb)))
 }

@@ -58,7 +58,7 @@ func subWord(word uint32) uint32 { // key expansion
 	return x
 }
 
-func (aesgcm *aesgcm) Encrypt(message []byte) []byte {
+func (aesgcm *aesgcm) encrypt(message []byte) []byte {
 	if !aesgcm.ready {
 		panic("The key must be set prior to encrypting data")
 	}
@@ -90,7 +90,7 @@ func (aesgcm *aesgcm) Encrypt(message []byte) []byte {
 	return cipherText
 }
 
-func (aesgcm *aesgcm) Decrypt(message []byte) []byte {
+func (aesgcm *aesgcm) decrypt(message []byte) []byte {
 	if !aesgcm.ready {
 		panic("The key must be set prior to decrypting data")
 	}
