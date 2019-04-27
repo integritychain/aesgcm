@@ -11,6 +11,13 @@ type bWord struct {
 	right uint64
 }
 
+func min(x, y int) int {
+	if x > y {
+		return y
+	}
+	return x
+}
+
 func bXor(a, b bWord) bWord {
 	var c bWord
 	c.right = a.right ^ b.right
@@ -54,12 +61,8 @@ func xMuly(x, y bWord) bWord {
 	return z
 }
 
-var H bWord
-
-func initH(key []byte) {
-	//var left, right
-	var instance = New().Key(key)
-	res := instance.Encrypt([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+func (aesgcm *aesgcm) initH(key []byte) *aesgcm {
+	res := aesgcm.Encrypt([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 	var state = fmt.Sprintf("%32x", res)
 	//fmt.Println(state)
 	left, err := strconv.ParseUint(state[0:15], 16, 64)
@@ -70,14 +73,15 @@ func initH(key []byte) {
 	if err != nil {
 		panic("Prob 2")
 	}
-	H.left, H.right = left, right
+	aesgcm.h.left, aesgcm.h.right = left, right
+	return aesgcm
 }
 
 // Algorithm2: GHASH
-func gHash(blocks []bWord) bWord {
+func (aesgcm *aesgcm) gHash(blocks []bWord) bWord {
 	var y bWord
 	for index := 0; index < len(blocks); index++ {
-		y = xMuly(bXor(y, blocks[index]), H)
+		y = xMuly(bXor(y, blocks[index]), aesgcm.h)
 	}
 	return y
 }
@@ -85,11 +89,11 @@ func gHash(blocks []bWord) bWord {
 var icb bWord
 
 // generate ICB
-func genICB(iv [3]uint32) {
+func (aesgcm *aesgcm) genICB(iv [3]uint32) {
 	var j0 bWord
 	j0.left = (uint64(iv[0]) << 32) | uint64(iv[1])
 	j0.right = (uint64(iv[2]) << 32) | 0x01
-	icb = j0 // incM32(j0)
+	aesgcm.icb = j0 // incM32(j0)
 }
 
 func bWord2Bytes(x bWord) []byte {
@@ -98,17 +102,6 @@ func bWord2Bytes(x bWord) []byte {
 	binary.BigEndian.PutUint64(b[8:16], x.right)
 	return b
 }
-
-func eKY0() { // Test case 3
-	var keyW = bWord{0xfeffe9928665731c, 0x6d6a8f9467308308}
-	var key = bWord2Bytes(keyW)
-	var instance = New().Key(key)
-	genICB([3]uint32{0xcafebabe, 0xfacedbad, 0xdecaf888})
-	result := instance.Encrypt(bWord2Bytes(icb))
-	fmt.Printf("%x", result)
-}
-
-// Algorithm 3: GCTR ................ not yet ......
 
 func incM32(x bWord) bWord {
 	var z bWord
