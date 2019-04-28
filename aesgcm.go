@@ -3,9 +3,17 @@ package aesgcm
 import (
 	"crypto/rand"
 	"encoding/binary"
-	"fmt"
 	"io"
 )
+
+// TODO:
+//  1. Clean up all the testcases; consistent print strings, strings, checks, var names etc
+//  2. Figure out spec for returned ciphertext, IV, Tag
+//  3. Run code coverage on unit test - any dead code that can be backed off
+//  4. Name internal variables to match spec
+//  5. Build solid plaintext only
+//  6. Add associated data
+//  7. Figure out how to parse CAVP testcases
 
 type aesgcm struct {
 	ready      bool
@@ -75,7 +83,7 @@ func (aesgcm *aesgcm) Seal(dst, nonce, plaintext, additionalData []byte) []byte 
 
 	aesgcm.runningTag = xMuly(bXor(aesgcm.runningTag, aesgcm.lenAlenC), aesgcm.h)
 	aesgcm.runningTag = bXor(aesgcm.runningTag, aesgcm.eky0)
-	fmt.Printf("tag: %x", aesgcm.runningTag)
+	//fmt.Printf("tag: %x", aesgcm.runningTag)
 	return cipher[0:len(plaintext)]
 }
 

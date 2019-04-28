@@ -1,5 +1,3 @@
-// +build !internal
-
 package aesgcm
 
 import (
@@ -221,7 +219,7 @@ func Test_initH(t *testing.T) { // Test case 1 in revised spec
 	var instance = NewAESGCM([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, [3]uint32{0, 0, 0})
 	instance.initH([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 	var res = fmt.Sprintf("%x", instance.h)
-	assertEqualsString(t, "{66e94bd4ef8a2c3 884cfa59ca342b2e}", res, "blah")
+	assertEqualsString(t, "{66e94bd4ef8a2c3b 884cfa59ca342b2e}", res, "blah")
 }
 
 // Test initialization of H - test case 3
@@ -229,7 +227,7 @@ func Test_newAESGCM_InitializeH(t *testing.T) {
 	var key = []byte{0xfe, 0xff, 0xe9, 0x92, 0x86, 0x65, 0x73, 0x1c, 0x6d, 0x6a, 0x8f, 0x94, 0x67, 0x30, 0x83, 0x08}
 	var instance = NewAESGCM(key, [3]uint32{0, 0, 0})
 	var r1 = fmt.Sprintf("%0x", instance.h)
-	assertEqualsString(t, "{b83b533708bf535 aa6e52980d53b78}", r1, "Bad h")
+	assertEqualsString(t, "{b83b533708bf535d aa6e52980d53b78}", r1, "Bad h")
 }
 
 //Test generation of ICB (Y0) - test case 3

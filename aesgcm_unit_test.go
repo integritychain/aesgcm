@@ -1,5 +1,3 @@
-// +build !unit
-
 package aesgcm_test
 
 import (
