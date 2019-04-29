@@ -8,9 +8,6 @@ import (
 
 func (aesgcm *aesgcm) key(key []byte) *aesgcm {
 	aesgcm.nk = len(key) / 4
-	if (aesgcm.nk != 4) && (aesgcm.nk != 6) && (aesgcm.nk != 8) {
-		panic("key length must be 128, 192 or 256 bits")
-	}
 	rcon := [11]uint32{0, 0x01000000, 0x02000000, 0x04000000, 0x08000000, 0x10000000, 0x20000000, 0x40000000, 0x80000000, 0x1b000000, 0x36000000}
 	aesgcm.nr = [9]int{0, 0, 0, 0, 10, 0, 12, 0, 14}[aesgcm.nk]
 

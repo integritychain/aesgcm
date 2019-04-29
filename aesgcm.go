@@ -8,12 +8,16 @@ import (
 
 // TODO:
 //  1. Clean up all the testcases; consistent print strings, strings, checks, var names etc
+//     - clearly annotate source of each expected data
+//     - test util for uint32 words2state()
+//     - check length of nonce
 //  2. Figure out spec for returned ciphertext, IV, Tag
 //  3. Run code coverage on unit test - any dead code that can be backed off
 //  4. Name internal variables to match spec
 //  5. Build solid plaintext only
 //  6. Add associated data
-//  7. Figure out how to parse CAVP testcases
+//  7. SIMPLIFY!!!
+//  8. Figure out how to parse CAVP testcases
 
 type aesgcm struct {
 	ready      bool
@@ -35,15 +39,15 @@ const (
 
 // Maybe add AEAD New ; then need to adapt nonceSize and overhead?
 
-func NewAESGCM(key []byte, nonce [3]uint32) *aesgcm {
-	//if len(key) != 32 {
-	//	panic("key length must be 32-bytes (256-bits)")
-	//}
+func NewAESGCM(key []byte) *aesgcm {
+	var keyLength = len(key) // Bytes
+	if (keyLength != 16) && (keyLength != 24) && (keyLength != 32) {
+		panic("key length must be 128, 192 or 256 bits")
+	}
 	var newAESGCM = new(aesgcm)
 	newAESGCM.key(key)
 	newAESGCM.initH(key)
-	newAESGCM.genICB(nonce)
-	newAESGCM.calcEky0()
+	//newAESGCM.calcEky0()  // Do not remove until everything works!
 	return newAESGCM
 }
 
@@ -57,10 +61,12 @@ func (aesgcm aesgcm) Overhead() int {
 	return overhead
 }
 
-func (aesgcm *aesgcm) Seal(dst, nonce, plaintext, additionalData []byte) []byte { // What does this return????
+func (aesgcm *aesgcm) Seal(dst []byte, nonce [3]uint32, plaintext, additionalData []byte) []byte { // What does this return????
+	// CHECK LENGTH OF NONCE!
 	// Ultimately push a bunch of this into gcm.go
 	aesgcm.lenAlenC.left = uint64(len(additionalData)) * 8
 	aesgcm.lenAlenC.right = uint64(len(plaintext)) * 8
+	aesgcm.genICB(nonce)
 	var cipher = make([]byte, len(plaintext)+len(plaintext)%16)
 	var index = 0
 
@@ -94,7 +100,7 @@ func (aesgcm aesgcm) SimpleSeal(plaintext, additionalData []byte) []byte {
 	if _, err := io.ReadFull(rand.Reader, ciphertext[0:nonceSize]); err != nil {
 		panic(err.Error())
 	}
-	aesgcm.Seal(ciphertext[nonceSize:nonceSize+len(plaintext)], ciphertext[0:nonceSize], plaintext, additionalData)
+	///oooga	aesgcm.Seal(ciphertext[nonceSize:nonceSize+len(plaintext)], ciphertext[0:nonceSize], plaintext, additionalData)
 	return ciphertext
 }
 

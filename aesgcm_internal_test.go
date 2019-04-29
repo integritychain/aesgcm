@@ -1,6 +1,13 @@
 package aesgcm
 
+// Internal tests for aes.go and gcm.go
+
+// See "FIPS PUB 197" at https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.197.pdf
+// See "NIST SP800-38D" at https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf
+// See "GCM Operation" at http://luca-giuzzi.unibs.it/corsi/Support/papers-cryptography/gcm-spec.pdf
+
 import (
+	"encoding/hex"
 	"fmt"
 	"math/rand"
 	"runtime/debug"
@@ -11,288 +18,354 @@ import (
 // Testing utils
 //
 
-func assertEqualsString(t *testing.T, expected string, actual string, message interface{}) {
+func assertEqualsString(t *testing.T, expected string, actual string) {
 	if expected != actual {
-		t.Error(fmt.Sprintf("Expected %v,  Got %v --> %v", expected, actual, message))
+		t.Error(fmt.Sprintf("\nExpected %v\nGot  --> %v\n", expected, actual))
 		t.Logf(string(debug.Stack()))
 	}
 }
 
 //
-// AES key expansion internals; data from Appendix A.1 i=4
+// AES key expansion internals
 //
 
-func Test_rotWord(t *testing.T) {
-	var rot = rotWord(0x09cf4f3c)
-	var result = fmt.Sprintf("%08x", rot)
-	assertEqualsString(t, "cf4f3c09", result, "Bad rotWord")
+func Test_aes_rotWord(t *testing.T) {
+	var rot uint32
+	rot = rotWord(0x09cf4f3c)
+	actual := fmt.Sprintf("%08x", rot)
+	assertEqualsString(t, "cf4f3c09", actual) // FIPS PUB 197, Appendix A.1, pg 27, i=4
 }
 
-func Test_subWord(t *testing.T) {
-	var sub = subWord(0xcf4f3c09)
-	var result = fmt.Sprintf("%08x", sub)
-	assertEqualsString(t, "8a84eb01", result, "Bad subWord")
-}
-
-//
-// AES key expansion; data from Appendix A.1, A.2 and A.3
-//
-
-func Test_key128(t *testing.T) {
-	var instance = new(aesgcm).key([]byte{0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15,
-		0x88, 0x09, 0xcf, 0x4f, 0x3c})
-	var result = fmt.Sprintf("%08x - %08x", instance.eKey[3], instance.eKey[43])
-	assertEqualsString(t, "09cf4f3c - b6630ca6", result, "new key 128")
-}
-
-func Test_key192(t *testing.T) {
-	var instance = new(aesgcm).key([]byte{0x8e, 0x73, 0xb0, 0xf7, 0xda, 0x0e, 0x64, 0x52, 0xc8, 0x10, 0xf3,
-		0x2b, 0x80, 0x90, 0x79, 0xe5, 0x62, 0xf8, 0xea, 0xd2, 0x52, 0x2c, 0x6b, 0x7b})
-	var result = fmt.Sprintf("%08x - %08x", instance.eKey[3], instance.eKey[51])
-	assertEqualsString(t, "809079e5 - 01002202", result, "new key 128")
-}
-
-func Test_key256(t *testing.T) {
-	var instance = new(aesgcm).key([]byte{0x60, 0x3d, 0xeb, 0x10, 0x15, 0xca, 0x71, 0xbe, 0x2b, 0x73, 0xae,
-		0xf0, 0x85, 0x7d, 0x77, 0x81, 0x1f, 0x35, 0x2c, 0x07, 0x3b, 0x61, 0x08, 0xd7, 0x2d, 0x98, 0x10,
-		0xa3, 0x09, 0x14, 0xdf, 0xf4})
-	var result = fmt.Sprintf("%08x - %08x", instance.eKey[3], instance.eKey[59])
-	assertEqualsString(t, "857d7781 - 706c631e", result, "new key 128")
+func Test_aes_subWord(t *testing.T) {
+	var sub uint32
+	sub = subWord(0xcf4f3c09)
+	actual := fmt.Sprintf("%08x", sub)
+	assertEqualsString(t, "8a84eb01", actual) // FIPS PUB 197, Appendix A.1, pg 27, i=4
 }
 
 //
-// AES cipher internals; data from section 4.2, 4.2.1 and Appendix B
+// AES key expansion
 //
 
-func Test_xtime(t *testing.T) {
-	assertEqualsString(t, "ae", fmt.Sprintf("%02x", xtime(0x57)), "Bad xtime(0x57")
-	assertEqualsString(t, "47", fmt.Sprintf("%02x", xtime(0xae)), "Bad xtime(0xae)")
-	assertEqualsString(t, "8e", fmt.Sprintf("%02x", xtime(0x47)), "Bad xtime(0x47")
-	assertEqualsString(t, "07", fmt.Sprintf("%02x", xtime(0x8e)), "Bad xtime(0x8e)")
+func Test_aes_keyExpansion_128(t *testing.T) {
+	var instance *aesgcm
+	key, _ := hex.DecodeString("2b7e151628aed2a6abf7158809cf4f3c")
+	instance = new(aesgcm).key(key)
+	actual := fmt.Sprintf("%08x - %08x", instance.eKey[3], instance.eKey[43])
+	assertEqualsString(t, "09cf4f3c - b6630ca6", actual) // FIPS PUB 197, Appendix A.1, pg 27,28
 }
 
-func Test_mulMod(t *testing.T) {
-	assertEqualsString(t, "c1", fmt.Sprintf("%x", mulMod(0x57, 0x83)), "Bad mulMod")
+func Test_aes_keyExpansion_192(t *testing.T) {
+	var instance *aesgcm
+	key, _ := hex.DecodeString("8e73b0f7da0e6452c810f32b809079e562f8ead2522c6b7b")
+	instance = new(aesgcm).key(key)
+	actual := fmt.Sprintf("%08x - %08x", instance.eKey[3], instance.eKey[51])
+	assertEqualsString(t, "809079e5 - 01002202", actual) // FIPS PUB 197, Appendix A.2, pg 28,30
 }
 
-func Test_subBytes(t *testing.T) {
+func Test_aes_keyExpansion_256(t *testing.T) {
+	var instance *aesgcm
+	key, _ := hex.DecodeString("603deb1015ca71be2b73aef0857d77811f352c073b6108d72d9810a30914dff4")
+
+	instance = new(aesgcm).key(key)
+	actual := fmt.Sprintf("%08x - %08x", instance.eKey[3], instance.eKey[59])
+	assertEqualsString(t, "857d7781 - 706c631e", actual) // FIPS PUB 197, Appendix A.3, pg 30,32
+}
+
+//
+// AES cipher internals
+//
+
+func Test_aes_xtime(t *testing.T) {
+	var xt byte
+
+	xt = xtime(0x57)
+	actual1 := fmt.Sprintf("%02x", xt)
+	assertEqualsString(t, "ae", actual1) // FIPS PUB 197, Section 4.2.1, pg 12
+
+	xt = xtime(0xae)
+	actual2 := fmt.Sprintf("%02x", xt)
+	assertEqualsString(t, "47", actual2) // FIPS PUB 197, Section 4.2.1, pg 12
+
+	xt = xtime(0x47)
+	actual3 := fmt.Sprintf("%02x", xt)
+	assertEqualsString(t, "8e", actual3) // FIPS PUB 197, Section 4.2.1, pg 12
+
+	xt = xtime(0x8e)
+	actual4 := fmt.Sprintf("%02x", xt)
+	assertEqualsString(t, "07", actual4) // FIPS PUB 197, Section 4.2.1, pg 12
+}
+
+func Test_aes_mulMod(t *testing.T) {
+	var mul byte
+	mul = mulMod(0x57, 0x83)
+	actual := fmt.Sprintf("%02x", mul)
+	assertEqualsString(t, "c1", actual) // FIPS PUB 197, Section 4.2, pg 11
+	mul = mulMod(0x57, 0x13)
+	actual = fmt.Sprintf("%02x", mul)
+	assertEqualsString(t, "fe", actual) // FIPS PUB 197, Section 4.2.1, pg 11
+
+}
+
+func Test_aes_subBytes(t *testing.T) {
 	var instance = new(aesgcm)
 	instance.state = [4][4]byte{{0x19, 0xa0, 0x9a, 0xe9}, {0x3d, 0xf4, 0xc6, 0xf8}, {0xe3, 0xe2, 0x8d, 0x48}, {0xbe, 0x2b, 0x2a, 0x08}}
 	instance.subBytes()
-	var result = fmt.Sprintf("%08x", instance.state)
-	assertEqualsString(t, "[d4e0b81e 27bfb441 11985d52 aef1e530]", result, "Bad subBytes")
+	actual := fmt.Sprintf("%08x", instance.state)
+	assertEqualsString(t, "[d4e0b81e 27bfb441 11985d52 aef1e530]", actual) // FIPS PUB 197, Appendix B, pg 33, round=1
 }
 
-func Test_invSubBytes(t *testing.T) {
+func Test_aes_invSubBytes(t *testing.T) {
 	var instance = new(aesgcm)
 	instance.state = [4][4]byte{{0xd4, 0xe0, 0xb8, 0x1e}, {0x27, 0xbf, 0xb4, 0x41}, {0x11, 0x98, 0x5d, 0x52}, {0xae, 0xf1, 0xe5, 0x30}}
 	instance.invSubBytes()
-	var result = fmt.Sprintf("%08x", instance.state)
-	assertEqualsString(t, "[19a09ae9 3df4c6f8 e3e28d48 be2b2a08]", result, "Bad invSubBytes")
+	actual := fmt.Sprintf("%08x", instance.state)
+	assertEqualsString(t, "[19a09ae9 3df4c6f8 e3e28d48 be2b2a08]", actual) // FIPS PUB 197, Appendix B, pg 33, round=1 (backwards)
 }
 
-// Confirm that the tables are fully invertible
-func Test_roundTrips(t *testing.T) {
+// Confirm that the tables are fully invertible via round trip substitution
+func Test_aes_roundTrips(t *testing.T) {
 	for row := 0; row < 4; row++ {
 		for col := 0; col < 4; col++ {
-			var x = sBox[row][col]
-			var xRow = x >> 4
-			var xCol = x & 0x0f
-			var y = invSBox[xRow][xCol]
-			var z = uint32(row<<4 + col)
-			assertEqualsString(t, fmt.Sprintf("%v", z), fmt.Sprintf("%v", uint32(y)), fmt.Sprintf("X %02x != %02xy", x, y))
+			var orig, subSub byte
+			sub := sBox[row][col]
+			subRow := sub >> 4
+			subCol := sub & 0x0f
+			subSub = invSBox[subRow][subCol]
+			orig = uint8(row<<4 + col)
+			actual := fmt.Sprintf("%v", orig == subSub)
+			assertEqualsString(t, "true", actual) // FIPS PUB 197, Section 5.1.1 and 5.3.2, Fig 7 and 14, pg 16,22
 		}
 	}
 }
 
-func Test_shiftRows(t *testing.T) {
+func Test_aes_shiftRows(t *testing.T) {
 	var instance = new(aesgcm)
 	instance.state = [4][4]byte{{0xd4, 0xe0, 0xb8, 0x1e}, {0x27, 0xbf, 0xb4, 0x41}, {0x11, 0x98, 0x5d, 0x52}, {0xae, 0xf1, 0xe5, 0x30}}
 	instance.shiftRows()
-	var result = fmt.Sprintf("%08x", instance.state)
-	assertEqualsString(t, "[d4e0b81e bfb44127 5d521198 30aef1e5]", result, "Bad shiftRows")
+	actual := fmt.Sprintf("%08x", instance.state)
+	assertEqualsString(t, "[d4e0b81e bfb44127 5d521198 30aef1e5]", actual) // FIPS PUB 197, Appendix B, pg 33, round=1
 }
 
-func Test_invShiftRows(t *testing.T) {
+func Test_aes_invShiftRows(t *testing.T) {
 	var instance = new(aesgcm)
 	instance.state = [4][4]byte{{0xd4, 0xe0, 0xb8, 0x1e}, {0xbf, 0xb4, 0x41, 0x27}, {0x5d, 0x52, 0x11, 0x98}, {0x30, 0xae, 0xf1, 0xe5}}
 	instance.invShiftRows()
-	var result = fmt.Sprintf("%08x", instance.state)
-	assertEqualsString(t, "[d4e0b81e 27bfb441 11985d52 aef1e530]", result, "Bad invShiftRows")
+	actual := fmt.Sprintf("%08x", instance.state)
+	assertEqualsString(t, "[d4e0b81e 27bfb441 11985d52 aef1e530]", actual) // FIPS PUB 197, Appendix B, pg 33, round=1 (backwards)
 }
 
-func Test_mixColumns(t *testing.T) {
+func Test_aes_mixColumns(t *testing.T) {
 	var instance = new(aesgcm)
 	instance.state = [4][4]byte{{0xd4, 0xe0, 0xb8, 0x1e}, {0xbf, 0xb4, 0x41, 0x27}, {0x5d, 0x52, 0x11, 0x98}, {0x30, 0xae, 0xf1, 0xe5}}
 	instance.mixColumns()
-	var result = fmt.Sprintf("%08x", instance.state)
-	assertEqualsString(t, "[04e04828 66cbf806 8119d326 e59a7a4c]", result, "Bad mixColumns")
+	actual := fmt.Sprintf("%08x", instance.state)
+	assertEqualsString(t, "[04e04828 66cbf806 8119d326 e59a7a4c]", actual) // FIPS PUB 197, Appendix B, pg 33, round=1
 }
 
-func Test_invMixColumns(t *testing.T) {
+func Test_aes_invMixColumns(t *testing.T) {
 	var instance = new(aesgcm)
 	instance.state = [4][4]byte{{0x04, 0xe0, 0x48, 0x28}, {0x66, 0xcb, 0xf8, 0x06}, {0x81, 0x19, 0xd3, 0x26}, {0xe5, 0x9a, 0x7a, 0x4c}}
 	instance.invMixColumns()
-	var result = fmt.Sprintf("%08x", instance.state)
-	assertEqualsString(t, "[d4e0b81e bfb44127 5d521198 30aef1e5]", result, "Bad invMixColumns")
+	actual := fmt.Sprintf("%08x", instance.state)
+	assertEqualsString(t, "[d4e0b81e bfb44127 5d521198 30aef1e5]", actual) // FIPS PUB 197, Appendix B, pg 33, round=1 (backwards)
 }
 
-func Test_addRoundKey(t *testing.T) {
+func Test_aes_addRoundKey(t *testing.T) {
 	var instance = new(aesgcm)
 	instance.state = [4][4]byte{{0x04, 0xe0, 0x48, 0x28}, {0x66, 0xcb, 0xf8, 0x06}, {0x81, 0x19, 0xd3, 0x26}, {0xe5, 0x9a, 0x7a, 0x4c}}
 	instance.eKey[4], instance.eKey[5], instance.eKey[6], instance.eKey[7] = 0xa0fafe17, 0x88542cb1, 0x23a33939, 0x2a6c7605
 	instance.addRoundKey(1)
-	var result = fmt.Sprintf("%08x", instance.state)
-	assertEqualsString(t, "[a4686b02 9c9f5b6a 7f35ea50 f22b4349]", result, "Bad addRoundKey")
+	actual := fmt.Sprintf("%08x", instance.state)
+	assertEqualsString(t, "[a4686b02 9c9f5b6a 7f35ea50 f22b4349]", actual) // FIPS PUB 197, Appendix B, pg 33, round=2
 }
 
 //
-// AES cipher; data from Appendix C.1, C.2, C.3
+// AES cipher; Note that decrypt functionality isn't actually needed for GCM
 //
 
-func Test_aesEncrypt128(t *testing.T) {
-	var instance = new(aesgcm).key([]byte{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
-		0x0b, 0x0c, 0x0d, 0x0e, 0x0f})
-	cText := instance.encrypt([]byte{0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa,
-		0xbb, 0xcc, 0xdd, 0xee, 0xff})
-	var result = fmt.Sprintf("%x", cText)
-	assertEqualsString(t, "69c4e0d86a7b0430d8cdb78070b4c55a", result, "Bad addRoundKey")
+func Test_aes_encrypt_128(t *testing.T) {
+	var cText []byte
+	key, _ := hex.DecodeString("000102030405060708090a0b0c0d0e0f")
+	instance := new(aesgcm).key(key)
+	pText, _ := hex.DecodeString("00112233445566778899aabbccddeeff")
+	cText = instance.encrypt(pText)
+	actual := fmt.Sprintf("%0x", cText)
+	assertEqualsString(t, "69c4e0d86a7b0430d8cdb78070b4c55a", actual) // FIPS PUB 197, Appendix C.1, pg 35-36
 }
 
-func Test_aesDecrypt128(t *testing.T) {
-	var instance = new(aesgcm).key([]byte{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
-		0x0b, 0x0c, 0x0d, 0x0e, 0x0f})
-	cText := instance.decrypt([]byte{0x69, 0xc4, 0xe0, 0xd8, 0x6a, 0x7b, 0x04, 0x30, 0xd8, 0xcd, 0xb7, 0x80, 0x70, 0xb4, 0xc5, 0x5a})
-	var result = fmt.Sprintf("%x", cText)
-	assertEqualsString(t, "00112233445566778899aabbccddeeff", result, "Bad addRoundKey")
+func Test_aes_decrypt_128(t *testing.T) {
+	var pText []byte
+	key, _ := hex.DecodeString("000102030405060708090a0b0c0d0e0f")
+	instance := new(aesgcm).key(key)
+	cText, _ := hex.DecodeString("69c4e0d86a7b0430d8cdb78070b4c55a")
+	pText = instance.decrypt(cText)
+	actual := fmt.Sprintf("%0x", pText)
+	assertEqualsString(t, "00112233445566778899aabbccddeeff", actual) // FIPS PUB 197, Appendix C.1, pg 36-37
 }
 
-func Test_aesEncrypt192(t *testing.T) {
-	var instance = new(aesgcm).key([]byte{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
-		0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17})
-	cText := instance.encrypt([]byte{0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa,
-		0xbb, 0xcc, 0xdd, 0xee, 0xff})
-	var result = fmt.Sprintf("%x", cText)
-	assertEqualsString(t, "dda97ca4864cdfe06eaf70a0ec0d7191", result, "Bad addRoundKey")
+func Test_aes_encrypt_192(t *testing.T) {
+	var cText []byte
+	key, _ := hex.DecodeString("000102030405060708090a0b0c0d0e0f1011121314151617")
+	instance := new(aesgcm).key(key)
+	pText, _ := hex.DecodeString("00112233445566778899aabbccddeeff")
+	cText = instance.encrypt(pText)
+	actual := fmt.Sprintf("%0x", cText)
+	assertEqualsString(t, "dda97ca4864cdfe06eaf70a0ec0d7191", actual) // FIPS PUB 197, Appendix C.2, pg 38-40
 }
 
-func Test_aesDecrypt192(t *testing.T) {
-	var instance = new(aesgcm).key([]byte{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
-		0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17})
-	cText := instance.decrypt([]byte{0xdd, 0xa9, 0x7c, 0xa4, 0x86, 0x4c, 0xdf, 0xe0, 0x6e, 0xaf, 0x70, 0xa0, 0xec, 0x0d, 0x71, 0x91})
-	var result = fmt.Sprintf("%x", cText)
-	assertEqualsString(t, "00112233445566778899aabbccddeeff", result, "Bad addRoundKey")
+func Test_aes_decrypt_192(t *testing.T) {
+	var pText []byte
+	key, _ := hex.DecodeString("000102030405060708090a0b0c0d0e0f1011121314151617")
+	instance := new(aesgcm).key(key)
+	cText, _ := hex.DecodeString("dda97ca4864cdfe06eaf70a0ec0d7191")
+	pText = instance.decrypt(cText)
+	actual := fmt.Sprintf("%0x", pText)
+	assertEqualsString(t, "00112233445566778899aabbccddeeff", actual) // FIPS PUB 197, Appendix C.2, pg 40-41
 }
 
-func Test_aesEncrypt256(t *testing.T) {
-	var instance = new(aesgcm).key([]byte{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
-		0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a,
-		0x1b, 0x1c, 0x1d, 0x1e, 0x1f})
-	cText := instance.encrypt([]byte{0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa,
-		0xbb, 0xcc, 0xdd, 0xee, 0xff})
-	var result = fmt.Sprintf("%x", cText)
-	assertEqualsString(t, "8ea2b7ca516745bfeafc49904b496089", result, "Bad addRoundKey")
+func Test_aes_encrypt_256(t *testing.T) {
+	var cText []byte
+	key, _ := hex.DecodeString("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+	instance := new(aesgcm).key(key)
+	pText, _ := hex.DecodeString("00112233445566778899aabbccddeeff")
+	cText = instance.encrypt(pText)
+	actual := fmt.Sprintf("%0x", cText)
+	assertEqualsString(t, "8ea2b7ca516745bfeafc49904b496089", actual) // FIPS PUB 197, Appendix C.3, pg 42-43
 }
 
-func Test_aesDecrypt256(t *testing.T) {
-	var instance = new(aesgcm).key([]byte{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
-		0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a,
-		0x1b, 0x1c, 0x1d, 0x1e, 0x1f})
-	cText := instance.decrypt([]byte{0x8e, 0xa2, 0xb7, 0xca, 0x51, 0x67, 0x45, 0xbf, 0xea, 0xfc, 0x49, 0x90, 0x4b, 0x49, 0x60, 0x89})
-	var result = fmt.Sprintf("%x", cText)
-	assertEqualsString(t, "00112233445566778899aabbccddeeff", result, "Bad addRoundKey")
+func Test_aes_decrypt_256(t *testing.T) {
+	var pText []byte
+	key, _ := hex.DecodeString("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+	instance := new(aesgcm).key(key)
+	cText, _ := hex.DecodeString("8ea2b7ca516745bfeafc49904b496089")
+	pText = instance.decrypt(cText)
+	actual := fmt.Sprintf("%0x", pText)
+	assertEqualsString(t, "00112233445566778899aabbccddeeff", actual) // FIPS PUB 197, Appendix C.3, pg 43-44
 }
 
 //
-// GCM internals; data from Appendix C.1, C.2, C.3
+// GCM internals
 //
 
-func Test_newAESGCM_KeyExpansion(t *testing.T) { // Test from AES spec
-	var key = []byte{0x60, 0x3d, 0xeb, 0x10, 0x15, 0xca, 0x71, 0xbe, 0x2b, 0x73, 0xae,
-		0xf0, 0x85, 0x7d, 0x77, 0x81, 0x1f, 0x35, 0x2c, 0x07, 0x3b, 0x61, 0x08, 0xd7, 0x2d, 0x98, 0x10,
-		0xa3, 0x09, 0x14, 0xdf, 0xf4}
-	var instance = NewAESGCM(key, [3]uint32{0, 0, 0})
-	assertEqualsString(t, "706c631e", fmt.Sprintf("%x", instance.eKey[59]), "Bad eKey[59]")
+func Test_gcm_keyExpansion_256(t *testing.T) {
+	var instance *aesgcm
+	key, _ := hex.DecodeString("603deb1015ca71be2b73aef0857d77811f352c073b6108d72d9810a30914dff4")
+	instance = NewAESGCM(key)
+	actual := fmt.Sprintf("%0x", instance.eKey[59])
+	assertEqualsString(t, "706c631e", actual) // FIPS PUB 197, Appendix A.3, pg 30,32
 }
 
-func Test_initH(t *testing.T) { // Test case 1 in revised spec
-	var instance = NewAESGCM([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, [3]uint32{0, 0, 0})
-	instance.initH([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
-	var res = fmt.Sprintf("%x", instance.h)
-	assertEqualsString(t, "{66e94bd4ef8a2c3b 884cfa59ca342b2e}", res, "blah")
+func Test_gcm_initH(t *testing.T) {
+	var instance *aesgcm
+	key, _ := hex.DecodeString("00000000000000000000000000000000")
+	instance = NewAESGCM(key)
+	pText, _ := hex.DecodeString("00000000000000000000000000000000")
+	instance.initH(pText)
+	actual := fmt.Sprintf("%x", instance.h)
+	assertEqualsString(t, "{66e94bd4ef8a2c3b 884cfa59ca342b2e}", actual) // GCM Operation, Appendix B, Test Case 1, pg 27
 }
 
-// Test initialization of H - test case 3
-func Test_newAESGCM_InitializeH(t *testing.T) {
-	var key = []byte{0xfe, 0xff, 0xe9, 0x92, 0x86, 0x65, 0x73, 0x1c, 0x6d, 0x6a, 0x8f, 0x94, 0x67, 0x30, 0x83, 0x08}
-	var instance = NewAESGCM(key, [3]uint32{0, 0, 0})
-	var r1 = fmt.Sprintf("%0x", instance.h)
-	assertEqualsString(t, "{b83b533708bf535d aa6e52980d53b78}", r1, "Bad h")
+func Test_gcm_initializeH(t *testing.T) {
+	var instance *aesgcm
+	key, _ := hex.DecodeString("feffe9928665731c6d6a8f9467308308")
+	instance = NewAESGCM(key)
+	actual := fmt.Sprintf("%0x", instance.h)
+	assertEqualsString(t, "{b83b533708bf535d aa6e52980d53b78}", actual) // GCM Operation, Appendix B, Test Case 3, pg 28
 }
 
-//Test generation of ICB (Y0) - test case 3
-func Test_newAESGCM_GenerateICB(t *testing.T) {
-	var key = []byte{0xfe, 0xff, 0xe9, 0x92, 0x86, 0x65, 0x73, 0x1c, 0x6d, 0x6a, 0x8f, 0x94, 0x67, 0x30, 0x83, 0x08}
-	var instance = NewAESGCM(key, [3]uint32{0xcafebabe, 0xfacedbad, 0xdecaf888})
-	var r1 = fmt.Sprintf("%0x", instance.icb)
-	assertEqualsString(t, "{cafebabefacedbad decaf88800000001}", r1, "Bad h")
-}
-
-func Test_genICB(t *testing.T) { // Called Y0 in "revised spec testcases"
+func Test_gcm_genICB(t *testing.T) {
 	var instance = new(aesgcm)
 	instance.genICB([3]uint32{0xcafebabe, 0xfacedbad, 0xdecaf888})
-	var res = fmt.Sprintf("%x", instance.icb)
-	assertEqualsString(t, "{cafebabefacedbad decaf88800000001}", res, "blah")
+	actual := fmt.Sprintf("%x", instance.icb)
+	assertEqualsString(t, "{cafebabefacedbad decaf88800000001}", actual) // GCM operation, Appendix B, Test Case 3, pg 28
 }
 
-// See https://stackoverflow.com/questions/10655026/gcm-multiplication-implementation
-func Test_algorithm1(t *testing.T) {
-	// Multiplication should be commutative
-	for index := 0; index < 100000; index++ {
+//Test generation of ICB (Y0) - test case 3  //// Note, calculation of ICB is done at Seal time, not construction time as I had it
+//func Test_gcm_generateICB(t *testing.T) {
+//	var instance *aesgcm
+//	instance = NewAESGCM([]byte{0xfe, 0xff, 0xe9, 0x92, 0x86, 0x65, 0x73, 0x1c, 0x6d, 0x6a, 0x8f, 0x94, 0x67, 0x30, 0x83, 0x08}, [3]uint32{0xcafebabe, 0xfacedbad, 0xdecaf888})
+//	actual := fmt.Sprintf("%0x", instance.icb)
+//	assertEqualsString(t, "{cafebabefacedbad decaf88800000001}", actual) // GCM operation, Appendix B, Test Case 3, pg 28
+//}
+
+func Test_gcm_xMulY_1(t *testing.T) {
+	H := bWord{0xb83b533708bf535d, 0x0aa6e52980d53b78}
+	A1 := bWord{0, 0} // H to be multiplied by 0
+	var X1 bWord
+	X1 = xMuly(A1, H)
+	actual := fmt.Sprintf("%0x", X1)
+	assertEqualsString(t, "{0 0}", actual) // First principles
+}
+
+func Test_gcm_xMulY_2(t *testing.T) {
+	H := bWord{0xb83b533708bf535d, 0x0aa6e52980d53b78}
+	A1 := bWord{0xfeedfacedeadbeef, 0xfeedfacedeadbeef} // First full block of A
+	var X1 bWord
+	X1 = xMuly(A1, H)
+	actual := fmt.Sprintf("%0x", X1)
+	assertEqualsString(t, "{ed56aaf8a72d6704 9fdb9228edba1322}", actual) // GCM operation, Appendix B, Test Case 4, pg 29
+}
+
+func Test_gcm_xMulY_3(t *testing.T) {
+	H := bWord{0xb83b533708bf535d, 0x0aa6e52980d53b78}
+	C1 := bWord{0x42831ec221777424, 0x4b7221b784d0d49c} // First block of C
+	var X1 bWord
+	X1 = xMuly(C1, H)
+	actual := fmt.Sprintf("%0x", X1)
+	assertEqualsString(t, "{59ed3f2bb1a0aaa0 7c9f56c6a504647b}", actual) // GCM operation, Appendix B, Test Case 3, pg 28
+}
+
+func Test_gcm_xMulY_commutative(t *testing.T) {
+	// Multiplication should be commutative ->  A*B == B*A
+	for index := 0; index < 10000; index++ { // 10k iterations
 		operandA := bWord{rand.Uint64(), rand.Uint64()}
 		operandB := bWord{rand.Uint64(), rand.Uint64()}
 		result1 := xMuly(operandA, operandB)
 		result2 := xMuly(operandB, operandA)
-		assertEqualsString(t, fmt.Sprintf("%x", result1.left), fmt.Sprintf("%x", result2.left), "left went bad")
-		assertEqualsString(t, fmt.Sprintf("%x", result1.right), fmt.Sprintf("%x", result2.right), "right went bad")
+		assertEqualsString(t, fmt.Sprintf("%0x", result1.left), fmt.Sprintf("%0x", result2.left))   // First principles
+		assertEqualsString(t, fmt.Sprintf("%0x", result1.right), fmt.Sprintf("%0x", result2.right)) // First principles
 	}
 }
 
-// Testcase 4 - check X1, see page 29
-func Test_xMul(t *testing.T) {
-	var H = bWord{0xb83b533708bf535d, 0x0aa6e52980d53b78}
-	var A1 = bWord{0xfeedfacedeadbeef, 0xfeedfacedeadbeef} // First block of A
-	var X1 = xMuly(A1, H)
-	var res = fmt.Sprintf("%x", X1)
-	assertEqualsString(t, "{ed56aaf8a72d6704 9fdb9228edba1322}", res, "hmmm")
+func Test_gcm_xMulY_associative(t *testing.T) {
+	// Multiplication should be commutative ->  (A*B)*C == A*(B*C)
+	for index := 0; index < 10000; index++ { // 10k iterations
+		operandA := bWord{rand.Uint64(), rand.Uint64()}
+		operandB := bWord{rand.Uint64(), rand.Uint64()}
+		operandC := bWord{rand.Uint64(), rand.Uint64()}
+		result1 := xMuly(xMuly(operandA, operandB), operandC)
+		result2 := xMuly(operandA, xMuly(operandB, operandC))
+		assertEqualsString(t, fmt.Sprintf("%0x", result1.left), fmt.Sprintf("%0x", result2.left))   // First principles
+		assertEqualsString(t, fmt.Sprintf("%0x", result1.right), fmt.Sprintf("%0x", result2.right)) // First principles
+	}
 }
 
-// What is mult by 0?
-func Test_xMul2(t *testing.T) {
-	var H = bWord{0xb83b533708bf535d, 0x0aa6e52980d53b78}
-	var A1 = bWord{0, 0} // First block of A
-	var X1 = xMuly(A1, H)
-	var res = fmt.Sprintf("%x", X1)
-	assertEqualsString(t, "{0 0}", res, "hmmm")
+func Test_gcm_xMulY_distributive(t *testing.T) {
+	// Multiplication should be commutative ->  (A+B)*C == A*C+B*C
+	for index := 0; index < 10000; index++ { // 10k iterations
+		operandA := bWord{rand.Uint64(), rand.Uint64()}
+		operandB := bWord{rand.Uint64(), rand.Uint64()}
+		operandC := bWord{rand.Uint64(), rand.Uint64()}
+		result1 := xMuly(bXor(operandA, operandB), operandC)
+		result2 := bXor(xMuly(operandA, operandC), xMuly(operandB, operandC))
+		assertEqualsString(t, fmt.Sprintf("%0x", result1.left), fmt.Sprintf("%0x", result2.left))   // First principles
+		assertEqualsString(t, fmt.Sprintf("%0x", result1.right), fmt.Sprintf("%0x", result2.right)) // First principles
+	}
 }
 
-// How to get E9...
-func Test_xMul3(t *testing.T) {
-	var H = bWord{0xb83b533708bf535d, 0x0aa6e52980d53b78}
-	var C1 = bWord{0x42831ec221777424, 0x4b7221b784d0d49c} // First block of A
-	var X1 = xMuly(C1, H)
-	var res = fmt.Sprintf("%x", X1)
-	assertEqualsString(t, "{59ed3f2bb1a0aaa0 7c9f56c6a504647b}", res, "hmmm")
-}
+func Test_gcm_incM32(t *testing.T) {
+	var incResult bWord
 
-func Test_incM32(t *testing.T) {
-	var result1 = incM32(bWord{0xFEDCBA9876543210, 0xFEDCBA9876543210})
-	var r1 = fmt.Sprintf("%x", result1)
-	assertEqualsString(t, "{fedcba9876543210 fedcba9876543211}", r1, "hmmm")
-	var result2 = incM32(bWord{0xFEDCBA9876543210, 0xFEDCBA98EFFFFFFF})
-	var r2 = fmt.Sprintf("%x", result2)
-	assertEqualsString(t, "{fedcba9876543210 fedcba98f0000000}", r2, "hmmm")
-	var result3 = incM32(bWord{0xFEDCBA9876543210, 0xFEDCBA98FFFFFFFF})
-	var r3 = fmt.Sprintf("%x", result3)
-	assertEqualsString(t, "{fedcba9876543210 fedcba9800000000}", r3, "hmmm")
+	incResult = incM32(bWord{0xFEDCBA9876543210, 0xFEDCBA9876543210})
+	actual := fmt.Sprintf("%0x", incResult)
+	assertEqualsString(t, "{fedcba9876543210 fedcba9876543211}", actual) // Contrived data
+
+	incResult = incM32(bWord{0xFEDCBA9876543210, 0xFEDCBA98EFFFFFFF})
+	actual = fmt.Sprintf("%0x", incResult)
+	assertEqualsString(t, "{fedcba9876543210 fedcba98f0000000}", actual) // Contrived data
+
+	incResult = incM32(bWord{0xFEDCBA9876543210, 0xFEDCBA98FFFFFFFF})
+	actual = fmt.Sprintf("%0x", incResult)
+	assertEqualsString(t, "{fedcba9876543210 fedcba9800000000}", actual) // Contrived data
 }
