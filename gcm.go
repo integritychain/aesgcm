@@ -88,11 +88,11 @@ func (aesgcm *aesgcm) gHash(blocks []bWord) bWord {
 
 var icb bWord
 
-// generate ICB
-func (aesgcm *aesgcm) genICB(iv [3]uint32) {
+// generate ICB - currently hardcoded for 12-byte IV
+func (aesgcm *aesgcm) genICB(iv []byte) {
 	var j0 bWord
-	j0.left = (uint64(iv[0]) << 32) | uint64(iv[1])
-	j0.right = (uint64(iv[2]) << 32) | 0x01
+	j0.left = binary.BigEndian.Uint64(iv[0:8])
+	j0.right = (uint64(binary.BigEndian.Uint32(iv[8:12])) << 32) | 0x01
 	aesgcm.icb = j0 // incM32(j0)
 }
 

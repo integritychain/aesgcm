@@ -7,10 +7,6 @@ import (
 )
 
 // TODO:
-//  1. Clean up all the testcases; consistent print strings, strings, checks, var names etc
-//     - clearly annotate source of each expected data
-//     - test util for uint32 words2state()
-//     - check length of nonce
 //  2. Figure out spec for returned ciphertext, IV, Tag
 //  3. Run code coverage on unit test - any dead code that can be backed off
 //  4. Name internal variables to match spec
@@ -21,8 +17,8 @@ import (
 
 type aesgcm struct {
 	ready      bool
-	eKey       [60]uint32 // Expanded key
-	nk         int        // Number of words in key
+	eKey       [60]uint32 // Expanded expandKey
+	nk         int        // Number of words in expandKey
 	nr         int        // Number of rounds
 	state      [4][4]byte // State
 	h          bWord
@@ -42,12 +38,11 @@ const (
 func NewAESGCM(key []byte) *aesgcm {
 	var keyLength = len(key) // Bytes
 	if (keyLength != 16) && (keyLength != 24) && (keyLength != 32) {
-		panic("key length must be 128, 192 or 256 bits")
+		panic("expandKey length must be 128, 192 or 256 bits")
 	}
 	var newAESGCM = new(aesgcm)
-	newAESGCM.key(key)
+	newAESGCM.expandKey(key)
 	newAESGCM.initH(key)
-	//newAESGCM.calcEky0()  // Do not remove until everything works!
 	return newAESGCM
 }
 
@@ -61,13 +56,16 @@ func (aesgcm aesgcm) Overhead() int {
 	return overhead
 }
 
-func (aesgcm *aesgcm) Seal(dst []byte, nonce [3]uint32, plaintext, additionalData []byte) []byte { // What does this return????
-	// CHECK LENGTH OF NONCE!
+func (aesgcm *aesgcm) Seal(dst []byte, nonce []byte, plaintext, additionalData []byte) []byte { // What does this return????
+	if len(nonce) != 12 {
+		panic("Nonce must be 12 bytes")
+	}
 	// Ultimately push a bunch of this into gcm.go
 	aesgcm.lenAlenC.left = uint64(len(additionalData)) * 8
 	aesgcm.lenAlenC.right = uint64(len(plaintext)) * 8
 	aesgcm.genICB(nonce)
-	var cipher = make([]byte, len(plaintext)+len(plaintext)%16)
+	aesgcm.calcEky0() // Do not remove until everything works!
+	var cipher = make([]byte, len(plaintext)+(len(plaintext)%16)+overhead)
 	var index = 0
 
 	for len(plaintext) > index {
@@ -90,7 +88,8 @@ func (aesgcm *aesgcm) Seal(dst []byte, nonce [3]uint32, plaintext, additionalDat
 	aesgcm.runningTag = xMuly(bXor(aesgcm.runningTag, aesgcm.lenAlenC), aesgcm.h)
 	aesgcm.runningTag = bXor(aesgcm.runningTag, aesgcm.eky0)
 	//fmt.Printf("tag: %x", aesgcm.runningTag)
-	return cipher[0:len(plaintext)]
+	copy(cipher[len(plaintext):len(plaintext)+overhead], bWord2Bytes(aesgcm.runningTag))
+	return cipher[0 : len(plaintext)+overhead]
 }
 
 // Generate nonce, encrypt plaintext and authenticate additional data

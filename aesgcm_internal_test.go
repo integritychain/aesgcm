@@ -20,7 +20,7 @@ import (
 
 func assertEqualsString(t *testing.T, expected string, actual string) {
 	if expected != actual {
-		t.Error(fmt.Sprintf("\nExpected %v\nGot  --> %v\n", expected, actual))
+		t.Error(fmt.Sprintf("\nExpected   %v\nActual --> %v\n", expected, actual))
 		t.Logf(string(debug.Stack()))
 	}
 }
@@ -50,7 +50,7 @@ func Test_aes_subWord(t *testing.T) {
 func Test_aes_keyExpansion_128(t *testing.T) {
 	var instance *aesgcm
 	key, _ := hex.DecodeString("2b7e151628aed2a6abf7158809cf4f3c")
-	instance = new(aesgcm).key(key)
+	instance = new(aesgcm).expandKey(key)
 	actual := fmt.Sprintf("%08x - %08x", instance.eKey[3], instance.eKey[43])
 	assertEqualsString(t, "09cf4f3c - b6630ca6", actual) // FIPS PUB 197, Appendix A.1, pg 27,28
 }
@@ -58,7 +58,7 @@ func Test_aes_keyExpansion_128(t *testing.T) {
 func Test_aes_keyExpansion_192(t *testing.T) {
 	var instance *aesgcm
 	key, _ := hex.DecodeString("8e73b0f7da0e6452c810f32b809079e562f8ead2522c6b7b")
-	instance = new(aesgcm).key(key)
+	instance = new(aesgcm).expandKey(key)
 	actual := fmt.Sprintf("%08x - %08x", instance.eKey[3], instance.eKey[51])
 	assertEqualsString(t, "809079e5 - 01002202", actual) // FIPS PUB 197, Appendix A.2, pg 28,30
 }
@@ -66,8 +66,7 @@ func Test_aes_keyExpansion_192(t *testing.T) {
 func Test_aes_keyExpansion_256(t *testing.T) {
 	var instance *aesgcm
 	key, _ := hex.DecodeString("603deb1015ca71be2b73aef0857d77811f352c073b6108d72d9810a30914dff4")
-
-	instance = new(aesgcm).key(key)
+	instance = new(aesgcm).expandKey(key)
 	actual := fmt.Sprintf("%08x - %08x", instance.eKey[3], instance.eKey[59])
 	assertEqualsString(t, "857d7781 - 706c631e", actual) // FIPS PUB 197, Appendix A.3, pg 30,32
 }
@@ -98,9 +97,11 @@ func Test_aes_xtime(t *testing.T) {
 
 func Test_aes_mulMod(t *testing.T) {
 	var mul byte
+
 	mul = mulMod(0x57, 0x83)
 	actual := fmt.Sprintf("%02x", mul)
 	assertEqualsString(t, "c1", actual) // FIPS PUB 197, Section 4.2, pg 11
+
 	mul = mulMod(0x57, 0x13)
 	actual = fmt.Sprintf("%02x", mul)
 	assertEqualsString(t, "fe", actual) // FIPS PUB 197, Section 4.2.1, pg 11
@@ -125,8 +126,8 @@ func Test_aes_invSubBytes(t *testing.T) {
 
 // Confirm that the tables are fully invertible via round trip substitution
 func Test_aes_roundTrips(t *testing.T) {
-	for row := 0; row < 4; row++ {
-		for col := 0; col < 4; col++ {
+	for row := 0; row < 16; row++ {
+		for col := 0; col < 16; col++ {
 			var orig, subSub byte
 			sub := sBox[row][col]
 			subRow := sub >> 4
@@ -187,60 +188,60 @@ func Test_aes_addRoundKey(t *testing.T) {
 func Test_aes_encrypt_128(t *testing.T) {
 	var cText []byte
 	key, _ := hex.DecodeString("000102030405060708090a0b0c0d0e0f")
-	instance := new(aesgcm).key(key)
+	instance := new(aesgcm).expandKey(key)
 	pText, _ := hex.DecodeString("00112233445566778899aabbccddeeff")
 	cText = instance.encrypt(pText)
-	actual := fmt.Sprintf("%0x", cText)
+	actual := fmt.Sprintf("%032x", cText)
 	assertEqualsString(t, "69c4e0d86a7b0430d8cdb78070b4c55a", actual) // FIPS PUB 197, Appendix C.1, pg 35-36
 }
 
 func Test_aes_decrypt_128(t *testing.T) {
 	var pText []byte
 	key, _ := hex.DecodeString("000102030405060708090a0b0c0d0e0f")
-	instance := new(aesgcm).key(key)
+	instance := new(aesgcm).expandKey(key)
 	cText, _ := hex.DecodeString("69c4e0d86a7b0430d8cdb78070b4c55a")
 	pText = instance.decrypt(cText)
-	actual := fmt.Sprintf("%0x", pText)
+	actual := fmt.Sprintf("%032x", pText)
 	assertEqualsString(t, "00112233445566778899aabbccddeeff", actual) // FIPS PUB 197, Appendix C.1, pg 36-37
 }
 
 func Test_aes_encrypt_192(t *testing.T) {
 	var cText []byte
 	key, _ := hex.DecodeString("000102030405060708090a0b0c0d0e0f1011121314151617")
-	instance := new(aesgcm).key(key)
+	instance := new(aesgcm).expandKey(key)
 	pText, _ := hex.DecodeString("00112233445566778899aabbccddeeff")
 	cText = instance.encrypt(pText)
-	actual := fmt.Sprintf("%0x", cText)
+	actual := fmt.Sprintf("%032x", cText)
 	assertEqualsString(t, "dda97ca4864cdfe06eaf70a0ec0d7191", actual) // FIPS PUB 197, Appendix C.2, pg 38-40
 }
 
 func Test_aes_decrypt_192(t *testing.T) {
 	var pText []byte
 	key, _ := hex.DecodeString("000102030405060708090a0b0c0d0e0f1011121314151617")
-	instance := new(aesgcm).key(key)
+	instance := new(aesgcm).expandKey(key)
 	cText, _ := hex.DecodeString("dda97ca4864cdfe06eaf70a0ec0d7191")
 	pText = instance.decrypt(cText)
-	actual := fmt.Sprintf("%0x", pText)
+	actual := fmt.Sprintf("%032x", pText)
 	assertEqualsString(t, "00112233445566778899aabbccddeeff", actual) // FIPS PUB 197, Appendix C.2, pg 40-41
 }
 
 func Test_aes_encrypt_256(t *testing.T) {
 	var cText []byte
 	key, _ := hex.DecodeString("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
-	instance := new(aesgcm).key(key)
+	instance := new(aesgcm).expandKey(key)
 	pText, _ := hex.DecodeString("00112233445566778899aabbccddeeff")
 	cText = instance.encrypt(pText)
-	actual := fmt.Sprintf("%0x", cText)
+	actual := fmt.Sprintf("%032x", cText)
 	assertEqualsString(t, "8ea2b7ca516745bfeafc49904b496089", actual) // FIPS PUB 197, Appendix C.3, pg 42-43
 }
 
 func Test_aes_decrypt_256(t *testing.T) {
 	var pText []byte
 	key, _ := hex.DecodeString("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
-	instance := new(aesgcm).key(key)
+	instance := new(aesgcm).expandKey(key)
 	cText, _ := hex.DecodeString("8ea2b7ca516745bfeafc49904b496089")
 	pText = instance.decrypt(cText)
-	actual := fmt.Sprintf("%0x", pText)
+	actual := fmt.Sprintf("%032x", pText)
 	assertEqualsString(t, "00112233445566778899aabbccddeeff", actual) // FIPS PUB 197, Appendix C.3, pg 43-44
 }
 
@@ -252,7 +253,7 @@ func Test_gcm_keyExpansion_256(t *testing.T) {
 	var instance *aesgcm
 	key, _ := hex.DecodeString("603deb1015ca71be2b73aef0857d77811f352c073b6108d72d9810a30914dff4")
 	instance = NewAESGCM(key)
-	actual := fmt.Sprintf("%0x", instance.eKey[59])
+	actual := fmt.Sprintf("%08x", instance.eKey[59])
 	assertEqualsString(t, "706c631e", actual) // FIPS PUB 197, Appendix A.3, pg 30,32
 }
 
@@ -262,7 +263,7 @@ func Test_gcm_initH(t *testing.T) {
 	instance = NewAESGCM(key)
 	pText, _ := hex.DecodeString("00000000000000000000000000000000")
 	instance.initH(pText)
-	actual := fmt.Sprintf("%x", instance.h)
+	actual := fmt.Sprintf("%016x", instance.h)
 	assertEqualsString(t, "{66e94bd4ef8a2c3b 884cfa59ca342b2e}", actual) // GCM Operation, Appendix B, Test Case 1, pg 27
 }
 
@@ -270,32 +271,25 @@ func Test_gcm_initializeH(t *testing.T) {
 	var instance *aesgcm
 	key, _ := hex.DecodeString("feffe9928665731c6d6a8f9467308308")
 	instance = NewAESGCM(key)
-	actual := fmt.Sprintf("%0x", instance.h)
-	assertEqualsString(t, "{b83b533708bf535d aa6e52980d53b78}", actual) // GCM Operation, Appendix B, Test Case 3, pg 28
+	actual := fmt.Sprintf("%016x", instance.h)
+	assertEqualsString(t, "{b83b533708bf535d 0aa6e52980d53b78}", actual) // GCM Operation, Appendix B, Test Case 3, pg 28
 }
 
 func Test_gcm_genICB(t *testing.T) {
 	var instance = new(aesgcm)
-	instance.genICB([3]uint32{0xcafebabe, 0xfacedbad, 0xdecaf888})
-	actual := fmt.Sprintf("%x", instance.icb)
+	icb, _ := hex.DecodeString("cafebabefacedbaddecaf888")
+	instance.genICB(icb) //[3]uint32{0xcafebabe, 0xfacedbad, 0xdecaf888})
+	actual := fmt.Sprintf("%016x", instance.icb)
 	assertEqualsString(t, "{cafebabefacedbad decaf88800000001}", actual) // GCM operation, Appendix B, Test Case 3, pg 28
 }
-
-//Test generation of ICB (Y0) - test case 3  //// Note, calculation of ICB is done at Seal time, not construction time as I had it
-//func Test_gcm_generateICB(t *testing.T) {
-//	var instance *aesgcm
-//	instance = NewAESGCM([]byte{0xfe, 0xff, 0xe9, 0x92, 0x86, 0x65, 0x73, 0x1c, 0x6d, 0x6a, 0x8f, 0x94, 0x67, 0x30, 0x83, 0x08}, [3]uint32{0xcafebabe, 0xfacedbad, 0xdecaf888})
-//	actual := fmt.Sprintf("%0x", instance.icb)
-//	assertEqualsString(t, "{cafebabefacedbad decaf88800000001}", actual) // GCM operation, Appendix B, Test Case 3, pg 28
-//}
 
 func Test_gcm_xMulY_1(t *testing.T) {
 	H := bWord{0xb83b533708bf535d, 0x0aa6e52980d53b78}
 	A1 := bWord{0, 0} // H to be multiplied by 0
 	var X1 bWord
 	X1 = xMuly(A1, H)
-	actual := fmt.Sprintf("%0x", X1)
-	assertEqualsString(t, "{0 0}", actual) // First principles
+	actual := fmt.Sprintf("%016x", X1)
+	assertEqualsString(t, "{0000000000000000 0000000000000000}", actual) // First principles
 }
 
 func Test_gcm_xMulY_2(t *testing.T) {
@@ -303,7 +297,7 @@ func Test_gcm_xMulY_2(t *testing.T) {
 	A1 := bWord{0xfeedfacedeadbeef, 0xfeedfacedeadbeef} // First full block of A
 	var X1 bWord
 	X1 = xMuly(A1, H)
-	actual := fmt.Sprintf("%0x", X1)
+	actual := fmt.Sprintf("%016x", X1)
 	assertEqualsString(t, "{ed56aaf8a72d6704 9fdb9228edba1322}", actual) // GCM operation, Appendix B, Test Case 4, pg 29
 }
 
@@ -312,7 +306,7 @@ func Test_gcm_xMulY_3(t *testing.T) {
 	C1 := bWord{0x42831ec221777424, 0x4b7221b784d0d49c} // First block of C
 	var X1 bWord
 	X1 = xMuly(C1, H)
-	actual := fmt.Sprintf("%0x", X1)
+	actual := fmt.Sprintf("%016x", X1)
 	assertEqualsString(t, "{59ed3f2bb1a0aaa0 7c9f56c6a504647b}", actual) // GCM operation, Appendix B, Test Case 3, pg 28
 }
 
@@ -323,8 +317,8 @@ func Test_gcm_xMulY_commutative(t *testing.T) {
 		operandB := bWord{rand.Uint64(), rand.Uint64()}
 		result1 := xMuly(operandA, operandB)
 		result2 := xMuly(operandB, operandA)
-		assertEqualsString(t, fmt.Sprintf("%0x", result1.left), fmt.Sprintf("%0x", result2.left))   // First principles
-		assertEqualsString(t, fmt.Sprintf("%0x", result1.right), fmt.Sprintf("%0x", result2.right)) // First principles
+		assertEqualsString(t, fmt.Sprintf("%016x", result1.left), fmt.Sprintf("%016x", result2.left))   // First principles
+		assertEqualsString(t, fmt.Sprintf("%016x", result1.right), fmt.Sprintf("%016x", result2.right)) // First principles
 	}
 }
 
@@ -336,8 +330,8 @@ func Test_gcm_xMulY_associative(t *testing.T) {
 		operandC := bWord{rand.Uint64(), rand.Uint64()}
 		result1 := xMuly(xMuly(operandA, operandB), operandC)
 		result2 := xMuly(operandA, xMuly(operandB, operandC))
-		assertEqualsString(t, fmt.Sprintf("%0x", result1.left), fmt.Sprintf("%0x", result2.left))   // First principles
-		assertEqualsString(t, fmt.Sprintf("%0x", result1.right), fmt.Sprintf("%0x", result2.right)) // First principles
+		assertEqualsString(t, fmt.Sprintf("%016x", result1.left), fmt.Sprintf("%016x", result2.left))   // First principles
+		assertEqualsString(t, fmt.Sprintf("%016x", result1.right), fmt.Sprintf("%016x", result2.right)) // First principles
 	}
 }
 
@@ -349,8 +343,8 @@ func Test_gcm_xMulY_distributive(t *testing.T) {
 		operandC := bWord{rand.Uint64(), rand.Uint64()}
 		result1 := xMuly(bXor(operandA, operandB), operandC)
 		result2 := bXor(xMuly(operandA, operandC), xMuly(operandB, operandC))
-		assertEqualsString(t, fmt.Sprintf("%0x", result1.left), fmt.Sprintf("%0x", result2.left))   // First principles
-		assertEqualsString(t, fmt.Sprintf("%0x", result1.right), fmt.Sprintf("%0x", result2.right)) // First principles
+		assertEqualsString(t, fmt.Sprintf("%016x", result1.left), fmt.Sprintf("%016x", result2.left))   // First principles
+		assertEqualsString(t, fmt.Sprintf("%016x", result1.right), fmt.Sprintf("%016x", result2.right)) // First principles
 	}
 }
 
@@ -358,14 +352,18 @@ func Test_gcm_incM32(t *testing.T) {
 	var incResult bWord
 
 	incResult = incM32(bWord{0xFEDCBA9876543210, 0xFEDCBA9876543210})
-	actual := fmt.Sprintf("%0x", incResult)
+	actual := fmt.Sprintf("%016x", incResult)
 	assertEqualsString(t, "{fedcba9876543210 fedcba9876543211}", actual) // Contrived data
 
 	incResult = incM32(bWord{0xFEDCBA9876543210, 0xFEDCBA98EFFFFFFF})
-	actual = fmt.Sprintf("%0x", incResult)
+	actual = fmt.Sprintf("%016x", incResult)
 	assertEqualsString(t, "{fedcba9876543210 fedcba98f0000000}", actual) // Contrived data
 
 	incResult = incM32(bWord{0xFEDCBA9876543210, 0xFEDCBA98FFFFFFFF})
-	actual = fmt.Sprintf("%0x", incResult)
+	actual = fmt.Sprintf("%016x", incResult)
 	assertEqualsString(t, "{fedcba9876543210 fedcba9800000000}", actual) // Contrived data
+
+	incResult = incM32(bWord{0xcafebabefacedbad, 0xdecaf88800000003})
+	actual = fmt.Sprintf("%016x", incResult)
+	assertEqualsString(t, "{cafebabefacedbad decaf88800000004}", actual) // GCM operation, Appendix B, Test Case 3, pg 28
 }

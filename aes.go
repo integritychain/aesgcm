@@ -6,7 +6,7 @@ import (
 	"encoding/binary"
 )
 
-func (aesgcm *aesgcm) key(key []byte) *aesgcm {
+func (aesgcm *aesgcm) expandKey(key []byte) *aesgcm {
 	aesgcm.nk = len(key) / 4
 	rcon := [11]uint32{0, 0x01000000, 0x02000000, 0x04000000, 0x08000000, 0x10000000, 0x20000000, 0x40000000, 0x80000000, 0x1b000000, 0x36000000}
 	aesgcm.nr = [9]int{0, 0, 0, 0, 10, 0, 12, 0, 14}[aesgcm.nk]
@@ -33,7 +33,7 @@ func (aesgcm *aesgcm) key(key []byte) *aesgcm {
 	return aesgcm
 }
 
-func rotWord(word uint32) uint32 { // key expansion
+func rotWord(word uint32) uint32 { // expandKey expansion
 	var bytes1 = make([]byte, 4)
 	binary.BigEndian.PutUint32(bytes1, word) // byte0->MSB
 	var bytes2 = make([]byte, 4)
@@ -43,7 +43,7 @@ func rotWord(word uint32) uint32 { // key expansion
 	return x
 }
 
-func subWord(word uint32) uint32 { // key expansion
+func subWord(word uint32) uint32 { // expandKey expansion
 	var bytes = make([]byte, 4)
 	binary.BigEndian.PutUint32(bytes, word) // byte0->MSB
 	for i := 0; i < 4; i++ {
@@ -57,7 +57,7 @@ func subWord(word uint32) uint32 { // key expansion
 
 func (aesgcm *aesgcm) encrypt(message []byte) []byte {
 	if !aesgcm.ready {
-		panic("The key must be set prior to encrypting data")
+		panic("The expandKey must be set prior to encrypting data")
 	}
 	if len(message) == 64 {
 		panic("Encryption currently only works for a single block")
@@ -89,7 +89,7 @@ func (aesgcm *aesgcm) encrypt(message []byte) []byte {
 
 func (aesgcm *aesgcm) decrypt(message []byte) []byte {
 	if !aesgcm.ready {
-		panic("The key must be set prior to decrypting data")
+		panic("The expandKey must be set prior to decrypting data")
 	}
 	if len(message) == 64 {
 		panic("Decryption currently only works for a single block")
