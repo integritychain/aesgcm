@@ -7,13 +7,14 @@ import (
 )
 
 // TODO:
-//  2. Figure out spec for returned ciphertext, IV, Tag
-//  3. Run code coverage on unit test - any dead code that can be backed off
-//  4. Name internal variables to match spec
-//  5. Build solid plaintext only
-//  6. Add associated data
+//  0. Clean-up code further...
+//  1. Name internal variables to match spec
+//  2. Add associated data
+//  3. Pass all CAVP tests
+//  4. Sprinkle some fails into CAVP dataset
+//  5. Consider supporting longer IVs
+//  6. Run code coverage on unit test - any dead code that can be backed off
 //  7. SIMPLIFY!!!
-//  8. Figure out how to parse CAVP testcases
 
 type aesgcm struct {
 	ready      bool
@@ -21,28 +22,26 @@ type aesgcm struct {
 	nk         int        // Number of words in expandKey
 	nr         int        // Number of rounds
 	state      [4][4]byte // State
-	h          bWord
-	icb        bWord
-	eky0       bWord
-	lenAlenC   bWord
-	runningTag bWord
+	h          blockWord
+	icb        blockWord
+	eky0       blockWord
+	lenAlenC   blockWord
+	runningTag blockWord
 }
 
 const (
-	nonceSize int = 12 // 12-byte, 96-bit nonce size
+	nonceSize int = 12 // 12-byte, 96-bit nonce size (minimum?)
 	overhead  int = 16 // 16-byte, 128-bit tag size
 )
-
-// Maybe add AEAD New ; then need to adapt nonceSize and overhead?
 
 func NewAESGCM(key []byte) *aesgcm {
 	var keyLength = len(key) // Bytes
 	if (keyLength != 16) && (keyLength != 24) && (keyLength != 32) {
-		panic("expandKey length must be 128, 192 or 256 bits")
+		panic("Key length must be 128, 192 or 256 bits")
 	}
 	var newAESGCM = new(aesgcm)
 	newAESGCM.expandKey(key)
-	newAESGCM.initH(key)
+	newAESGCM.initializeH(key)
 	return newAESGCM
 }
 
@@ -51,7 +50,7 @@ func (aesgcm aesgcm) NonceSize() int {
 	return nonceSize
 }
 
-// Overhead returns the maximum difference in bytes between the lengths of a plaintext and its ciphertext.
+// Overhead returns the difference in bytes between the lengths of a plaintext and its ciphertext (e.g. tag size).
 func (aesgcm aesgcm) Overhead() int {
 	return overhead
 }
@@ -64,8 +63,8 @@ func (aesgcm *aesgcm) Seal(dst []byte, nonce []byte, plaintext, additionalData [
 	aesgcm.lenAlenC.left = uint64(len(additionalData)) * 8
 	aesgcm.lenAlenC.right = uint64(len(plaintext)) * 8
 	aesgcm.genICB(nonce)
-	aesgcm.calcEky0() // Do not remove until everything works!
-	var cipher = make([]byte, len(plaintext)+(len(plaintext)%16)+overhead)
+	aesgcm.calcEky0()                                                      // Do not remove until everything works!
+	var cipher = make([]byte, len(plaintext)+(len(plaintext)%16)+overhead) // not exactly right?
 	var index = 0
 
 	for len(plaintext) > index {
@@ -79,15 +78,13 @@ func (aesgcm *aesgcm) Seal(dst []byte, nonce []byte, plaintext, additionalData [
 		for i := 0; i < min(16, len(plaintext)-index); i++ {
 			cipher[i+index] = plaintext[i+index] ^ result[i]
 		}
-		var bC = bytes2bWord(cipher[index : index+16])
-		var X = bXor(aesgcm.runningTag, bC)
-		aesgcm.runningTag = xMuly(X, aesgcm.h)
 		index += 16
 	}
 
-	aesgcm.runningTag = xMuly(bXor(aesgcm.runningTag, aesgcm.lenAlenC), aesgcm.h)
-	aesgcm.runningTag = bXor(aesgcm.runningTag, aesgcm.eky0)
-	//fmt.Printf("tag: %x", aesgcm.runningTag)
+	aesgcm.runningTag = aesgcm.gHash(cipher[0 : len(plaintext)+len(plaintext)%16])
+
+	aesgcm.runningTag = bwXMulY(bwXor(aesgcm.runningTag, aesgcm.lenAlenC), aesgcm.h)
+	aesgcm.runningTag = bwXor(aesgcm.runningTag, aesgcm.eky0)
 	copy(cipher[len(plaintext):len(plaintext)+overhead], bWord2Bytes(aesgcm.runningTag))
 	return cipher[0 : len(plaintext)+overhead]
 }

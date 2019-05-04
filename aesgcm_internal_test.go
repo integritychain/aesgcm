@@ -262,7 +262,7 @@ func Test_gcm_initH(t *testing.T) {
 	key, _ := hex.DecodeString("00000000000000000000000000000000")
 	instance = NewAESGCM(key)
 	pText, _ := hex.DecodeString("00000000000000000000000000000000")
-	instance.initH(pText)
+	instance.initializeH(pText)
 	actual := fmt.Sprintf("%016x", instance.h)
 	assertEqualsString(t, "{66e94bd4ef8a2c3b 884cfa59ca342b2e}", actual) // GCM Operation, Appendix B, Test Case 1, pg 27
 }
@@ -284,28 +284,28 @@ func Test_gcm_genICB(t *testing.T) {
 }
 
 func Test_gcm_xMulY_1(t *testing.T) {
-	H := bWord{0xb83b533708bf535d, 0x0aa6e52980d53b78}
-	A1 := bWord{0, 0} // H to be multiplied by 0
-	var X1 bWord
-	X1 = xMuly(A1, H)
+	H := blockWord{0xb83b533708bf535d, 0x0aa6e52980d53b78}
+	A1 := blockWord{0, 0} // H to be multiplied by 0
+	var X1 blockWord
+	X1 = bwXMulY(A1, H)
 	actual := fmt.Sprintf("%016x", X1)
 	assertEqualsString(t, "{0000000000000000 0000000000000000}", actual) // First principles
 }
 
 func Test_gcm_xMulY_2(t *testing.T) {
-	H := bWord{0xb83b533708bf535d, 0x0aa6e52980d53b78}
-	A1 := bWord{0xfeedfacedeadbeef, 0xfeedfacedeadbeef} // First full block of A
-	var X1 bWord
-	X1 = xMuly(A1, H)
+	H := blockWord{0xb83b533708bf535d, 0x0aa6e52980d53b78}
+	A1 := blockWord{0xfeedfacedeadbeef, 0xfeedfacedeadbeef} // First full block of A
+	var X1 blockWord
+	X1 = bwXMulY(A1, H)
 	actual := fmt.Sprintf("%016x", X1)
 	assertEqualsString(t, "{ed56aaf8a72d6704 9fdb9228edba1322}", actual) // GCM operation, Appendix B, Test Case 4, pg 29
 }
 
 func Test_gcm_xMulY_3(t *testing.T) {
-	H := bWord{0xb83b533708bf535d, 0x0aa6e52980d53b78}
-	C1 := bWord{0x42831ec221777424, 0x4b7221b784d0d49c} // First block of C
-	var X1 bWord
-	X1 = xMuly(C1, H)
+	H := blockWord{0xb83b533708bf535d, 0x0aa6e52980d53b78}
+	C1 := blockWord{0x42831ec221777424, 0x4b7221b784d0d49c} // First block of C
+	var X1 blockWord
+	X1 = bwXMulY(C1, H)
 	actual := fmt.Sprintf("%016x", X1)
 	assertEqualsString(t, "{59ed3f2bb1a0aaa0 7c9f56c6a504647b}", actual) // GCM operation, Appendix B, Test Case 3, pg 28
 }
@@ -313,10 +313,10 @@ func Test_gcm_xMulY_3(t *testing.T) {
 func Test_gcm_xMulY_commutative(t *testing.T) {
 	// Multiplication should be commutative ->  A*B == B*A
 	for index := 0; index < 10000; index++ { // 10k iterations
-		operandA := bWord{rand.Uint64(), rand.Uint64()}
-		operandB := bWord{rand.Uint64(), rand.Uint64()}
-		result1 := xMuly(operandA, operandB)
-		result2 := xMuly(operandB, operandA)
+		operandA := blockWord{rand.Uint64(), rand.Uint64()}
+		operandB := blockWord{rand.Uint64(), rand.Uint64()}
+		result1 := bwXMulY(operandA, operandB)
+		result2 := bwXMulY(operandB, operandA)
 		assertEqualsString(t, fmt.Sprintf("%016x", result1.left), fmt.Sprintf("%016x", result2.left))   // First principles
 		assertEqualsString(t, fmt.Sprintf("%016x", result1.right), fmt.Sprintf("%016x", result2.right)) // First principles
 	}
@@ -325,11 +325,11 @@ func Test_gcm_xMulY_commutative(t *testing.T) {
 func Test_gcm_xMulY_associative(t *testing.T) {
 	// Multiplication should be commutative ->  (A*B)*C == A*(B*C)
 	for index := 0; index < 10000; index++ { // 10k iterations
-		operandA := bWord{rand.Uint64(), rand.Uint64()}
-		operandB := bWord{rand.Uint64(), rand.Uint64()}
-		operandC := bWord{rand.Uint64(), rand.Uint64()}
-		result1 := xMuly(xMuly(operandA, operandB), operandC)
-		result2 := xMuly(operandA, xMuly(operandB, operandC))
+		operandA := blockWord{rand.Uint64(), rand.Uint64()}
+		operandB := blockWord{rand.Uint64(), rand.Uint64()}
+		operandC := blockWord{rand.Uint64(), rand.Uint64()}
+		result1 := bwXMulY(bwXMulY(operandA, operandB), operandC)
+		result2 := bwXMulY(operandA, bwXMulY(operandB, operandC))
 		assertEqualsString(t, fmt.Sprintf("%016x", result1.left), fmt.Sprintf("%016x", result2.left))   // First principles
 		assertEqualsString(t, fmt.Sprintf("%016x", result1.right), fmt.Sprintf("%016x", result2.right)) // First principles
 	}
@@ -338,32 +338,32 @@ func Test_gcm_xMulY_associative(t *testing.T) {
 func Test_gcm_xMulY_distributive(t *testing.T) {
 	// Multiplication should be commutative ->  (A+B)*C == A*C+B*C
 	for index := 0; index < 10000; index++ { // 10k iterations
-		operandA := bWord{rand.Uint64(), rand.Uint64()}
-		operandB := bWord{rand.Uint64(), rand.Uint64()}
-		operandC := bWord{rand.Uint64(), rand.Uint64()}
-		result1 := xMuly(bXor(operandA, operandB), operandC)
-		result2 := bXor(xMuly(operandA, operandC), xMuly(operandB, operandC))
+		operandA := blockWord{rand.Uint64(), rand.Uint64()}
+		operandB := blockWord{rand.Uint64(), rand.Uint64()}
+		operandC := blockWord{rand.Uint64(), rand.Uint64()}
+		result1 := bwXMulY(bwXor(operandA, operandB), operandC)
+		result2 := bwXor(bwXMulY(operandA, operandC), bwXMulY(operandB, operandC))
 		assertEqualsString(t, fmt.Sprintf("%016x", result1.left), fmt.Sprintf("%016x", result2.left))   // First principles
 		assertEqualsString(t, fmt.Sprintf("%016x", result1.right), fmt.Sprintf("%016x", result2.right)) // First principles
 	}
 }
 
 func Test_gcm_incM32(t *testing.T) {
-	var incResult bWord
+	var incResult blockWord
 
-	incResult = incM32(bWord{0xFEDCBA9876543210, 0xFEDCBA9876543210})
+	incResult = incM32(blockWord{0xFEDCBA9876543210, 0xFEDCBA9876543210})
 	actual := fmt.Sprintf("%016x", incResult)
 	assertEqualsString(t, "{fedcba9876543210 fedcba9876543211}", actual) // Contrived data
 
-	incResult = incM32(bWord{0xFEDCBA9876543210, 0xFEDCBA98EFFFFFFF})
+	incResult = incM32(blockWord{0xFEDCBA9876543210, 0xFEDCBA98EFFFFFFF})
 	actual = fmt.Sprintf("%016x", incResult)
 	assertEqualsString(t, "{fedcba9876543210 fedcba98f0000000}", actual) // Contrived data
 
-	incResult = incM32(bWord{0xFEDCBA9876543210, 0xFEDCBA98FFFFFFFF})
+	incResult = incM32(blockWord{0xFEDCBA9876543210, 0xFEDCBA98FFFFFFFF})
 	actual = fmt.Sprintf("%016x", incResult)
 	assertEqualsString(t, "{fedcba9876543210 fedcba9800000000}", actual) // Contrived data
 
-	incResult = incM32(bWord{0xcafebabefacedbad, 0xdecaf88800000003})
+	incResult = incM32(blockWord{0xcafebabefacedbad, 0xdecaf88800000003})
 	actual = fmt.Sprintf("%016x", incResult)
 	assertEqualsString(t, "{cafebabefacedbad decaf88800000004}", actual) // GCM operation, Appendix B, Test Case 3, pg 28
 }
