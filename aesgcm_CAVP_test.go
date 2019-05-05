@@ -1,10 +1,9 @@
 package aesgcm_test
 
 import (
+	"aesgcm"
 	"bufio"
 	"bytes"
-	"crypto/aes"
-	"crypto/cipher"
 	"fmt"
 	"os"
 	"testing"
@@ -63,7 +62,7 @@ func Test_encryption(t *testing.T) {
 			_, _ = fmt.Sscanf(line, "AAD = %x", &AAD)
 			_, _ = fmt.Sscanf(line, "CT = %x", &CT)
 			n, _ := fmt.Sscanf(line, "Tag = %x", &Tag)
-			if n > 0 && IVlen == 96 {
+			if n > 0 && IVlen == 96 && (PTlen+AADlen) > 1 {
 				t.Run(fmt.Sprintf("testEncrypt with  %v  line  %d", fileName, lineNumber),
 					testEncrypt(IV, Key, PT[0:PTlen/8], AAD[0:AADlen/8], CT[0:PTlen/8], Tag, Taglen))
 			}
@@ -74,13 +73,14 @@ func Test_encryption(t *testing.T) {
 
 func testEncrypt(nonce, key, plainText, additionalData, cipherText, tag []byte, Taglen int) func(*testing.T) {
 	return func(t *testing.T) {
-		block, _ := aes.NewCipher(key)
-		aesgcm, _ := cipher.NewGCM(block)
-		actual := aesgcm.Seal(nil, nonce, plainText, additionalData)
+		//block, _ := aes.NewCipher(key)
+		//aesgcm, _ := cipher.NewGCM(block)
+		var aesgcm = aesgcm.NewAESGCM(key)
+		actual := aesgcm.Seal(nil, nonce, plainText, additionalData) // returns cipherText || Tag
 		lessTag := len(actual) - 128/8 + Taglen/8
 		expected := append(cipherText, tag...)
 		if !bytes.Equal(expected, actual[0:lessTag]) {
-			t.Error(fmt.Sprintf("\nExpected %x\nGot      %x\n", expected, actual[0:lessTag]))
+			t.Error(fmt.Sprintf("\nExpected %x\nGot      %x\n", expected, actual[0:lessTag])) //
 		}
 	}
 }

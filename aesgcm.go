@@ -63,8 +63,8 @@ func (aesgcm *aesgcm) Seal(dst []byte, nonce []byte, plaintext, additionalData [
 	aesgcm.lenAlenC.left = uint64(len(additionalData)) * 8
 	aesgcm.lenAlenC.right = uint64(len(plaintext)) * 8
 	aesgcm.genICB(nonce)
-	aesgcm.calcEky0()                                                      // Do not remove until everything works!
-	var cipher = make([]byte, len(plaintext)+(len(plaintext)%16)+overhead) // not exactly right?
+	aesgcm.calcEky0()                                               // Do not remove until everything works!
+	var cipher = make([]byte, 16*((len(plaintext)+15)/16)+overhead) // not exactly right?
 	var index = 0
 
 	for len(plaintext) > index {
@@ -81,7 +81,10 @@ func (aesgcm *aesgcm) Seal(dst []byte, nonce []byte, plaintext, additionalData [
 		index += 16
 	}
 
-	aesgcm.runningTag = aesgcm.gHash(cipher[0 : len(plaintext)+len(plaintext)%16])
+	var freshAAD = make([]byte, 16*((len(additionalData)+15)/16))
+	copy(freshAAD, additionalData)
+
+	aesgcm.runningTag = aesgcm.gHash(append(freshAAD, cipher[0:16*((len(plaintext)+15)/16)]...))
 
 	aesgcm.runningTag = bwXMulY(bwXor(aesgcm.runningTag, aesgcm.lenAlenC), aesgcm.h)
 	aesgcm.runningTag = bwXor(aesgcm.runningTag, aesgcm.eky0)
