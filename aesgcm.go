@@ -1,8 +1,10 @@
 package aesgcm
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/binary"
+	"errors"
 	"io"
 )
 
@@ -104,8 +106,54 @@ func (aesgcm aesgcm) SimpleSeal(plaintext, additionalData []byte) []byte {
 }
 
 func (aesgcm aesgcm) Open(dst, nonce, ciphertext, additionalData []byte) ([]byte, error) {
-	// Magic here!
-	return nil, nil
+	if len(nonce) != 12 {
+		panic("Nonce must be 12 bytes")
+	}
+	// Ultimately push a bunch of this into gcm.go
+	lenCiphertext := len(ciphertext) - overhead
+	var ctTag = make([]byte, overhead)
+	copy(ctTag, ciphertext[lenCiphertext:])
+	for index := lenCiphertext; index < len(ciphertext); index++ {
+		ciphertext[index] = 0
+	}
+	aesgcm.lenAlenC.left = uint64(len(additionalData)) * 8
+	aesgcm.lenAlenC.right = uint64(lenCiphertext) * 8 // adjust for tag
+	aesgcm.genICB(nonce)
+	aesgcm.calcEky0()                                     // Do not remove until everything works!
+	var cipher = make([]byte, 16*((lenCiphertext+15)/16)) // not exactly right?
+	var index = 0
+
+	for lenCiphertext > index {
+
+		aesgcm.icb = incM32(aesgcm.icb)
+		var xx = make([]byte, 16)
+
+		binary.BigEndian.PutUint64(xx[0:8], aesgcm.icb.left)
+		binary.BigEndian.PutUint64(xx[8:16], aesgcm.icb.right)
+		var result = aesgcm.encrypt(xx)
+		for i := 0; i < min(16, lenCiphertext-index); i++ {
+			cipher[i+index] = ciphertext[i+index] ^ result[i]
+		}
+		index += 16
+	}
+
+	var freshAAD = make([]byte, 16*((len(additionalData)+15)/16))
+	copy(freshAAD, additionalData)
+
+	//var xx []byte
+	//xx = make([]byte, 16*((lenCiphertext+15)/16))
+	//copy(xx, ciphertext[0:lenCiphertext])  //COPY THE TAG OUT OF THE CTEXT THEN ZERO THE TRAILING BIT THEN SEND THAT TO GHASH
+	aesgcm.runningTag = aesgcm.gHash(append(freshAAD, ciphertext[0:16*((lenCiphertext+15)/16)]...)) // IF ORIG CIPHERTEXT IS LESS THAN A FULL BLOCK -> PROBS!!!!
+
+	aesgcm.runningTag = bwXMulY(bwXor(aesgcm.runningTag, aesgcm.lenAlenC), aesgcm.h)
+	aesgcm.runningTag = bwXor(aesgcm.runningTag, aesgcm.eky0)
+	//copy(cipher[len(ciphertext):len(ciphertext)-overhead], bWord2Bytes(aesgcm.runningTag))
+	var errOpen error
+	var tag = bWord2Bytes(aesgcm.runningTag)
+	if !bytes.Equal(tag, ctTag) {
+		errOpen = errors.New("cipher: message authentication failed")
+	}
+	return cipher[0 : len(ciphertext)-overhead], errOpen
 }
 
 // Reuses buffer, consumes nonce

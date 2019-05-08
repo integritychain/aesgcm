@@ -4,10 +4,15 @@ import (
 	"aesgcm"
 	"bufio"
 	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 )
+
+var testGolang = false // Set to true to test Go standard package, set to false to test this aesgcm code
 
 var testEncryptFiles = []string{
 	"./gcmtestvectors/gcmEncryptExtIV128.rsp", "./gcmtestvectors/gcmEncryptExtIV192.rsp", "./gcmtestvectors/gcmEncryptExtIV256.rsp",
@@ -62,7 +67,7 @@ func Test_encryption(t *testing.T) {
 			_, _ = fmt.Sscanf(line, "AAD = %x", &AAD)
 			_, _ = fmt.Sscanf(line, "CT = %x", &CT)
 			n, _ := fmt.Sscanf(line, "Tag = %x", &Tag)
-			if n > 0 && IVlen == 96 && (PTlen+AADlen) > 1 {
+			if n > 0 && IVlen == 96 {
 				t.Run(fmt.Sprintf("testEncrypt with  %v  line  %d", fileName, lineNumber),
 					testEncrypt(IV, Key, PT[0:PTlen/8], AAD[0:AADlen/8], CT[0:PTlen/8], Tag, Taglen))
 			}
@@ -73,14 +78,93 @@ func Test_encryption(t *testing.T) {
 
 func testEncrypt(nonce, key, plainText, additionalData, cipherText, tag []byte, Taglen int) func(*testing.T) {
 	return func(t *testing.T) {
-		//block, _ := aes.NewCipher(key)
-		//aesgcm, _ := cipher.NewGCM(block)
-		var aesgcm = aesgcm.NewAESGCM(key)
-		actual := aesgcm.Seal(nil, nonce, plainText, additionalData) // returns cipherText || Tag
+		var aesgcm1 cipher.AEAD
+		if testGolang {
+			block, _ := aes.NewCipher(key)
+			aesgcm1, _ = cipher.NewGCM(block)
+		} else {
+			aesgcm1 = aesgcm.NewAESGCM(key)
+		}
+		actual := aesgcm1.Seal(nil, nonce, plainText, additionalData) // returns cipherText || Tag
 		lessTag := len(actual) - 128/8 + Taglen/8
 		expected := append(cipherText, tag...)
 		if !bytes.Equal(expected, actual[0:lessTag]) {
 			t.Error(fmt.Sprintf("\nExpected %x\nGot      %x\n", expected, actual[0:lessTag])) //
+		}
+	}
+}
+
+func Test_decryption(t *testing.T) {
+	var Keylen, IVlen, PTlen, AADlen, Taglen, Count int // CAVP test fields
+	var Key, IV, PT, AAD, CT, Tag []byte                // CAVP test fields
+	var FAIL bool
+
+	for _, fileName := range testDecryptFiles {
+		var lineNumber int
+
+		fileHandle, err := os.Open(fileName)
+		if err != nil {
+			t.Error(fmt.Sprintf("Unable to open file: %v", fileName))
+			return
+		}
+
+		fileScanner := bufio.NewScanner(fileHandle)
+		for fileScanner.Scan() {
+			line := fileScanner.Text()
+			lineNumber++
+			// Slightly inefficient but effective
+			_, _ = fmt.Sscanf(line, "[Keylen = %d]", &Keylen)
+			_, _ = fmt.Sscanf(line, "[IVlen = %d]", &IVlen)
+			_, _ = fmt.Sscanf(line, "[PTlen = %d]", &PTlen)
+			_, _ = fmt.Sscanf(line, "[AADlen = %d]", &AADlen)
+			_, _ = fmt.Sscanf(line, "[Taglen = %d]", &Taglen)
+			n, _ := fmt.Sscanf(line, "Count = %d", &Count)
+			if n > 0 {
+				FAIL = false
+			} // Reset for new test
+			_, _ = fmt.Sscanf(line, "Key = %x", &Key)
+			_, _ = fmt.Sscanf(line, "IV = %x", &IV)
+			_, _ = fmt.Sscanf(line, "PT = %x", &PT)
+			_, _ = fmt.Sscanf(line, "AAD = %x", &AAD)
+			_, _ = fmt.Sscanf(line, "CT = %x", &CT)
+			_, _ = fmt.Sscanf(line, "Tag = %x", &Tag)
+			if strings.Contains(line, "FAIL") {
+				FAIL = true
+				PT = CT // just so the buffer size works
+			}
+			if (strings.Contains(line, "FAIL") || strings.Contains(line, "PT =")) && Taglen == 128 && IVlen == 96 {
+				t.Run(fmt.Sprintf("testDecrypt with  %v  line  %d", fileName, lineNumber),
+					testDecrypt(IV, Key, PT[0:PTlen/8], AAD[0:AADlen/8], CT[0:PTlen/8], Tag[0:Taglen/8], Taglen, FAIL, lineNumber))
+			}
+		}
+		_ = fileHandle.Close()
+	}
+}
+
+func testDecrypt(nonce, key, plainText, additionalData, cipherText, tag []byte, Taglen int, FAIL bool, lineNumber int) func(*testing.T) {
+	return func(t *testing.T) {
+		var aesgcm1 cipher.AEAD
+		if testGolang {
+			block, _ := aes.NewCipher(key)
+			aesgcm1, _ = cipher.NewGCM(block)
+		} else {
+			aesgcm1 = aesgcm.NewAESGCM(key)
+		}
+		if lineNumber == 8839 {
+			lineNumber++
+		}
+		actual, err := aesgcm1.Open(nil, nonce, append(cipherText, tag...), additionalData) // returns plainText
+		if err != nil {
+			if FAIL {
+				return
+			} else {
+				t.Error(fmt.Sprintf("Open returned error despite no FAIL on line %v\n", lineNumber)) //
+			}
+		}
+		//lessTag := len(actual) - 128/8 + Taglen/8
+		expected := plainText // append(cipherText, tag...)
+		if !bytes.Equal(expected, actual) {
+			t.Error(fmt.Sprintf("\nExpected %x\nGot      %x\n", expected, actual)) //
 		}
 	}
 }
