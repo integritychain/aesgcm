@@ -51,7 +51,7 @@ func Test_aes_keyExpansion_128(t *testing.T) {
 	var instance *aesgcm
 	key, _ := hex.DecodeString("2b7e151628aed2a6abf7158809cf4f3c")
 	instance = new(aesgcm).expandKey(key)
-	actual := fmt.Sprintf("%08x - %08x", instance.eKey[3], instance.eKey[43])
+	actual := fmt.Sprintf("%08x - %08x", instance.expandedKey[3], instance.expandedKey[43])
 	assertEqualsString(t, "09cf4f3c - b6630ca6", actual) // FIPS PUB 197, Appendix A.1, pg 27,28
 }
 
@@ -59,7 +59,7 @@ func Test_aes_keyExpansion_192(t *testing.T) {
 	var instance *aesgcm
 	key, _ := hex.DecodeString("8e73b0f7da0e6452c810f32b809079e562f8ead2522c6b7b")
 	instance = new(aesgcm).expandKey(key)
-	actual := fmt.Sprintf("%08x - %08x", instance.eKey[3], instance.eKey[51])
+	actual := fmt.Sprintf("%08x - %08x", instance.expandedKey[3], instance.expandedKey[51])
 	assertEqualsString(t, "809079e5 - 01002202", actual) // FIPS PUB 197, Appendix A.2, pg 28,30
 }
 
@@ -67,7 +67,7 @@ func Test_aes_keyExpansion_256(t *testing.T) {
 	var instance *aesgcm
 	key, _ := hex.DecodeString("603deb1015ca71be2b73aef0857d77811f352c073b6108d72d9810a30914dff4")
 	instance = new(aesgcm).expandKey(key)
-	actual := fmt.Sprintf("%08x - %08x", instance.eKey[3], instance.eKey[59])
+	actual := fmt.Sprintf("%08x - %08x", instance.expandedKey[3], instance.expandedKey[59])
 	assertEqualsString(t, "857d7781 - 706c631e", actual) // FIPS PUB 197, Appendix A.3, pg 30,32
 }
 
@@ -175,7 +175,7 @@ func Test_aes_invMixColumns(t *testing.T) {
 func Test_aes_addRoundKey(t *testing.T) {
 	var instance = new(aesgcm)
 	instance.state = [4][4]byte{{0x04, 0xe0, 0x48, 0x28}, {0x66, 0xcb, 0xf8, 0x06}, {0x81, 0x19, 0xd3, 0x26}, {0xe5, 0x9a, 0x7a, 0x4c}}
-	instance.eKey[4], instance.eKey[5], instance.eKey[6], instance.eKey[7] = 0xa0fafe17, 0x88542cb1, 0x23a33939, 0x2a6c7605
+	instance.expandedKey[4], instance.expandedKey[5], instance.expandedKey[6], instance.expandedKey[7] = 0xa0fafe17, 0x88542cb1, 0x23a33939, 0x2a6c7605
 	instance.addRoundKey(1)
 	actual := fmt.Sprintf("%08x", instance.state)
 	assertEqualsString(t, "[a4686b02 9c9f5b6a 7f35ea50 f22b4349]", actual) // FIPS PUB 197, Appendix B, pg 33, round=2
@@ -253,7 +253,7 @@ func Test_gcm_keyExpansion_256(t *testing.T) {
 	var instance *aesgcm
 	key, _ := hex.DecodeString("603deb1015ca71be2b73aef0857d77811f352c073b6108d72d9810a30914dff4")
 	instance = NewAESGCM(key)
-	actual := fmt.Sprintf("%08x", instance.eKey[59])
+	actual := fmt.Sprintf("%08x", instance.expandedKey[59])
 	assertEqualsString(t, "706c631e", actual) // FIPS PUB 197, Appendix A.3, pg 30,32
 }
 
@@ -262,7 +262,7 @@ func Test_gcm_initH(t *testing.T) {
 	key, _ := hex.DecodeString("00000000000000000000000000000000")
 	instance = NewAESGCM(key)
 	pText, _ := hex.DecodeString("00000000000000000000000000000000")
-	instance.initializeH(pText)
+	instance.initH(pText)
 	actual := fmt.Sprintf("%016x", instance.h)
 	assertEqualsString(t, "{66e94bd4ef8a2c3b 884cfa59ca342b2e}", actual) // GCM Operation, Appendix B, Test Case 1, pg 27
 }

@@ -2,33 +2,129 @@ package aesgcm
 
 import (
 	"bytes"
-	"crypto/rand"
 	"encoding/binary"
 	"errors"
-	"io"
 )
 
 // TODO:
-//  0. Clean-up code further...
-//  1. Name internal variables to match spec
-//  2. Add associated data
-//  3. Pass all CAVP tests
-//  4. Sprinkle some fails into CAVP dataset
-//  5. Consider supporting longer IVs
-//  6. Run code coverage on unit test - any dead code that can be backed off
-//  7. SIMPLIFY!!!
+//  2. Name internal variables to match spec
+//  3. Clean-up code further...
+//  4. Benchmark vs Golang
+//  6. SIMPLIFY, TUNE!!!
+
+type Aesgcm interface {
+	Encrypt(additionalData, message []byte) (initVector, tag []byte, err error)
+	DecryptAndVerify(initVector, tag []byte, additionalData, message []byte) (err error)
+	IVSizeBytes() (size uint)
+	SetIVSizeBytes(size uint)
+	SetIV(iv []byte)
+	TagSizeBytes() (size uint)
+}
 
 type aesgcm struct {
-	ready      bool
-	eKey       [60]uint32 // Expanded expandKey
-	nk         int        // Number of words in expandKey
-	nr         int        // Number of rounds
-	state      [4][4]byte // State
-	h          blockWord
-	icb        blockWord
-	eky0       blockWord
-	lenAlenC   blockWord
-	runningTag blockWord
+	iv          []byte
+	ready       bool
+	ivSize      uint
+	tagSize     uint
+	cb          []blockWord
+	expandedKey [60]uint32
+	nk          int // Number of words in expandKey
+	nr          int // Number of rounds
+	state       [4][4]byte
+	h           blockWord
+	icb         blockWord
+	eky0        blockWord
+	lenAlenC    blockWord
+	runningTag  blockWord
+}
+
+func New(key []byte) Aesgcm {
+	if (len(key) != 16) && (len(key) != 24) && (len(key) != 32) {
+		panic("Aesgcm does not support key lengths other than 128, 192 or 256 bits")
+	}
+	var aesgcm = new(aesgcm)
+	aesgcm.ivSize = 12
+	aesgcm.tagSize = 16
+	aesgcm.expandKey(key) // aes
+	aesgcm.initH(key)     // gcm
+	return aesgcm
+}
+
+func (aesgcm *aesgcm) IVSizeBytes() (size uint) {
+	size = aesgcm.ivSize
+	return size
+}
+
+func (aesgcm *aesgcm) TagSizeBytes() (size uint) {
+	size = aesgcm.tagSize
+	return size
+}
+
+func (aesgcm *aesgcm) SetIVSizeBytes(size uint) {
+	if size < 12 {
+		panic("Aesgcm does not support IV sizes less than 96 bits")
+	} // Better add logic to compute longer IVs
+	aesgcm.ivSize = size
+}
+
+func (aesgcm *aesgcm) SetIV(iv []byte) {
+	if len(iv) != 12 {
+		panic("Aesgcm iv must be 12 bytes")
+	}
+	aesgcm.iv = iv
+}
+
+func (aesgcm *aesgcm) Encrypt(additionalData, message []byte) (initVector, tag []byte, err error) {
+	initVector = aesgcm.initGCM(len(additionalData), len(message))
+
+	//var partial []byte
+	var numBlocks = len(message) / 16                // Number of full blocks in play
+	var maxThreads = 6                               // Max number of threads we can throw at it
+	var numThreads = min(maxThreads, numBlocks/10+1) // No sense in kicking off a large number of tiny threads; require 10 blocks before doing anything more
+	var blocksPerThread = numBlocks / numThreads     // Each thread has to handle this many blocks (the last will have extra fractional work)
+
+	// Simulate kicking off multiple threads for now // PROBABLY WANT TO KICK OFF AAD FIRST?
+	for index := 0; index < numThreads-1; index++ {
+		aesgcm.doBlocks(message[index*blocksPerThread*16:(index+1)*blocksPerThread*16], index*blocksPerThread+1)
+	}
+	var lastFullBlock = len(message) - len(message)%16
+	if lastFullBlock > 0 {
+		aesgcm.doBlocks(message[(numThreads-1)*blocksPerThread*16:lastFullBlock], (numThreads-1)*blocksPerThread+1)
+	}
+	var remaining = len(message) % 16
+	var xx []byte
+	if remaining > 0 {
+		xx = make([]byte, 16)
+		aesgcm.doBlocks(xx, len(message)/16+1)
+	}
+	for index := 0; index < remaining; index++ {
+		message[16*(len(message)/16)+index] = message[16*(len(message)/16)+index] ^ xx[index]
+	}
+	// calc tag
+	return initVector, nil, nil
+}
+
+func (aesgcm *aesgcm) doBlocks(message []byte, cbStart int) (partial []byte) {
+	var xx []byte
+	partial = make([]byte, 16)
+
+	var result []byte
+	for index := 0; index < len(message); index = index + 16 {
+		xx = bWord2Bytes(aesgcm.cb[index/16+cbStart])
+		result = aesgcm.encrypt(xx)
+		for i := 0; i < min(16, len(message)-index); i++ {
+			message[i+index] = message[i+index] ^ result[i]
+		}
+	}
+	for i := 16 * (len(message) / 16); i < len(message); i++ {
+		partial[i%16] = result[i%16]
+	}
+
+	return partial
+}
+
+func (aesgcm *aesgcm) DecryptAndVerify(initVector, tag []byte, additionalData, message []byte) (err error) {
+	panic("implement me")
 }
 
 const (
@@ -43,7 +139,7 @@ func NewAESGCM(key []byte) *aesgcm {
 	}
 	var newAESGCM = new(aesgcm)
 	newAESGCM.expandKey(key)
-	newAESGCM.initializeH(key)
+	newAESGCM.initH(key)
 	return newAESGCM
 }
 
@@ -94,17 +190,6 @@ func (aesgcm *aesgcm) Seal(dst []byte, nonce []byte, plaintext, additionalData [
 	return cipher[0 : len(plaintext)+overhead]
 }
 
-// Generate nonce, encrypt plaintext and authenticate additional data
-// Return nonce || ciphertext || tag
-func (aesgcm aesgcm) SimpleSeal(plaintext, additionalData []byte) []byte {
-	var ciphertext = make([]byte, nonceSize+len(plaintext)+overhead)
-	if _, err := io.ReadFull(rand.Reader, ciphertext[0:nonceSize]); err != nil {
-		panic(err.Error())
-	}
-	///oooga	aesgcm.Seal(ciphertext[nonceSize:nonceSize+len(plaintext)], ciphertext[0:nonceSize], plaintext, additionalData)
-	return ciphertext
-}
-
 func (aesgcm aesgcm) Open(dst, nonce, ciphertext, additionalData []byte) ([]byte, error) {
 	if len(nonce) != 12 {
 		panic("Nonce must be 12 bytes")
@@ -140,14 +225,10 @@ func (aesgcm aesgcm) Open(dst, nonce, ciphertext, additionalData []byte) ([]byte
 	var freshAAD = make([]byte, 16*((len(additionalData)+15)/16))
 	copy(freshAAD, additionalData)
 
-	//var xx []byte
-	//xx = make([]byte, 16*((lenCiphertext+15)/16))
-	//copy(xx, ciphertext[0:lenCiphertext])  //COPY THE TAG OUT OF THE CTEXT THEN ZERO THE TRAILING BIT THEN SEND THAT TO GHASH
 	aesgcm.runningTag = aesgcm.gHash(append(freshAAD, ciphertext[0:16*((lenCiphertext+15)/16)]...)) // IF ORIG CIPHERTEXT IS LESS THAN A FULL BLOCK -> PROBS!!!!
 
 	aesgcm.runningTag = bwXMulY(bwXor(aesgcm.runningTag, aesgcm.lenAlenC), aesgcm.h)
 	aesgcm.runningTag = bwXor(aesgcm.runningTag, aesgcm.eky0)
-	//copy(cipher[len(ciphertext):len(ciphertext)-overhead], bWord2Bytes(aesgcm.runningTag))
 	var errOpen error
 	var tag = bWord2Bytes(aesgcm.runningTag)
 	if !bytes.Equal(tag, ctTag) {

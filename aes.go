@@ -12,12 +12,12 @@ func (aesgcm *aesgcm) expandKey(key []byte) *aesgcm {
 	aesgcm.nr = [9]int{0, 0, 0, 0, 10, 0, 12, 0, 14}[aesgcm.nk]
 
 	for index := 0; index < aesgcm.nk; index++ {
-		aesgcm.eKey[index] = uint32(key[index*4])<<24 | uint32(key[index*4+1])<<16 |
+		aesgcm.expandedKey[index] = uint32(key[index*4])<<24 | uint32(key[index*4+1])<<16 |
 			uint32(key[index*4+2])<<8 | uint32(key[index*4+3])
 	}
 
 	for index := aesgcm.nk; index < (aesgcm.nr+1)*4; index++ {
-		temp := aesgcm.eKey[index-1]
+		temp := aesgcm.expandedKey[index-1]
 		if index%aesgcm.nk == 0 {
 			rw := rotWord(temp)
 			sw := subWord(rw)
@@ -26,7 +26,7 @@ func (aesgcm *aesgcm) expandKey(key []byte) *aesgcm {
 		} else if aesgcm.nk > 6 && index%aesgcm.nk == 4 {
 			temp = subWord(temp)
 		}
-		aesgcm.eKey[index] = aesgcm.eKey[index-aesgcm.nk] ^ temp
+		aesgcm.expandedKey[index] = aesgcm.expandedKey[index-aesgcm.nk] ^ temp
 	}
 
 	aesgcm.ready = true
@@ -126,7 +126,7 @@ func (aesgcm *aesgcm) addRoundKey(round int) {
 	for col := 0; col < 4; col++ {
 		var colWord uint32
 		colWord = uint32(aesgcm.state[0][col])<<24 + uint32(aesgcm.state[1][col])<<16 + uint32(aesgcm.state[2][col])<<8 + uint32(aesgcm.state[3][col])
-		colWord = colWord ^ aesgcm.eKey[(round*4)+col]
+		colWord = colWord ^ aesgcm.expandedKey[(round*4)+col]
 		aesgcm.state[0][col] = byte(colWord >> 24)
 		aesgcm.state[1][col] = byte(colWord >> 16)
 		aesgcm.state[2][col] = byte(colWord >> 8)
