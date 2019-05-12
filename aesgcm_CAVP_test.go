@@ -76,20 +76,20 @@ func Test_encryption(t *testing.T) {
 	}
 }
 
-func testEncrypt(nonce, key, plainText, additionalData, cipherText, tag []byte, Taglen int) func(*testing.T) {
+func testEncrypt(nonce, key, plainText, additionalData, cipherText, tag []byte, tagLen int) func(*testing.T) {
 	return func(t *testing.T) {
 		var aesgcm1 cipher.AEAD
+		var dst []byte
 		if testGolang {
 			block, _ := aes.NewCipher(key)
 			aesgcm1, _ = cipher.NewGCM(block)
 		} else {
 			aesgcm1 = aesgcm.NewAESGCM(key)
 		}
-		actual := aesgcm1.Seal(nil, nonce, plainText, additionalData) // returns cipherText || Tag
-		lessTag := len(actual) - 128/8 + Taglen/8
+		actual := aesgcm1.Seal(dst, nonce, plainText, additionalData) // Actual always gets a 128-bit tag
 		expected := append(cipherText, tag...)
-		if !bytes.Equal(expected, actual[0:lessTag]) {
-			t.Error(fmt.Sprintf("\nExpected %x\nGot      %x\n", expected, actual[0:lessTag])) //
+		if !bytes.Equal(expected, actual[0:len(actual)+tagLen/8-16]) {
+			t.Error(fmt.Sprintf("\nExpected %x\nGot      %x\n", expected, actual)) //
 		}
 	}
 }
@@ -144,16 +144,17 @@ func Test_decryption(t *testing.T) {
 func testDecrypt(nonce, key, plainText, additionalData, cipherText, tag []byte, Taglen int, FAIL bool, lineNumber int) func(*testing.T) {
 	return func(t *testing.T) {
 		var aesgcm1 cipher.AEAD
+		var dst []byte
 		if testGolang {
 			block, _ := aes.NewCipher(key)
 			aesgcm1, _ = cipher.NewGCM(block)
 		} else {
 			aesgcm1 = aesgcm.NewAESGCM(key)
 		}
-		if lineNumber == 8839 {
+		if lineNumber == 4429 {
 			lineNumber++
 		}
-		actual, err := aesgcm1.Open(nil, nonce, append(cipherText, tag...), additionalData) // returns plainText
+		actual, err := aesgcm1.Open(dst, nonce, append(cipherText, tag...), additionalData) // returns plainText
 		if err != nil {
 			if FAIL {
 				return

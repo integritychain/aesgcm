@@ -1,7 +1,6 @@
 package aesgcm
 
 import (
-	"crypto/rand"
 	"encoding/binary"
 )
 
@@ -11,9 +10,7 @@ type blockWord struct {
 	right uint64
 }
 
-type block [16]byte
-
-func (aesgcm *aesgcm) initH(key []byte) *aesgcm {
+func (aesgcm *aesgcm) initGcmH(key []byte) *aesgcm { // init via New
 	var hBlock []byte // 16
 	hBlock = aesgcm.encrypt([]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})
 	aesgcm.h.left = binary.BigEndian.Uint64(hBlock[0:8])
@@ -21,29 +18,41 @@ func (aesgcm *aesgcm) initH(key []byte) *aesgcm {
 	return aesgcm
 }
 
-func (aesgcm *aesgcm) initGCM(lenA, lenC int) (iv []byte) {
-	var numCB = (lenA+15)/16 + (lenC+15)/16 + 1
-	aesgcm.cb = make([]blockWord, numCB)
+func (aesgcm *aesgcm) initGcmY0(lenA, lenC int, iv []byte) { // init via Seal/Open
 	aesgcm.lenAlenC.left = uint64(lenA) * 8
 	aesgcm.lenAlenC.right = uint64(lenC) * 8
-	if len(aesgcm.iv) > 0 {
-		iv = aesgcm.iv
-	} else {
-		iv = make([]byte, aesgcm.ivSize)
-		var n, err = rand.Read(iv)
-		if uint(n) != aesgcm.ivSize || err != nil {
-			panic("Unable to generate random initialization vector")
+	aesgcm.icb.left = binary.BigEndian.Uint64(iv[0:8])
+	aesgcm.icb.right = (uint64(binary.BigEndian.Uint32(iv[8:12])) << 32) | 0x01
+	aesgcm.eky0 = bytes2bWord(aesgcm.encrypt(bWord2Bytes(aesgcm.icb)))
+}
+
+func (aesgcm *aesgcm) cipherBlocks(message, dst []byte) {
+	var Y = make([]byte, 16)
+
+	var result []byte
+	for index := 0; index < len(message); index = index + 16 {
+		Y = bWord2Bytes(plusM32(aesgcm.icb, uint32(1+index/16)))
+		result = aesgcm.encrypt(Y)
+		for i := 0; i < min(16, len(message)-index); i++ {
+			dst[i+index] = message[i+index] ^ result[i]
 		}
 	}
-	var j0 blockWord
-	j0.left = binary.BigEndian.Uint64(iv[0:8])
-	j0.right = (uint64(binary.BigEndian.Uint32(iv[8:12])) << 32) | 0x01
-	aesgcm.cb[0] = j0
-	for index := 1; index < numCB; index++ {
-		aesgcm.cb[index] = incM32(aesgcm.cb[index-1])
+}
+
+// Algorithm 2: GHASH function on pg 12
+func (aesgcm *aesgcm) gHash(blocks []byte, yIn blockWord) blockWord {
+
+	yOut := yIn
+	for index := 0; index < 16*(len(blocks)/16); index = index + 16 {
+		yOut = bwXMulY(bwXor(yOut, bytes2bWord(blocks[index:index+16])), aesgcm.h)
+
 	}
-	aesgcm.eky0 = bytes2bWord(aesgcm.encrypt(bWord2Bytes(aesgcm.cb[0])))
-	return iv
+	if len(blocks)%16 > 0 {
+		var tempData = make([]byte, 16)
+		copy(tempData, blocks[16*(len(blocks)/16):])
+		yOut = bwXMulY(bwXor(yOut, bytes2bWord(tempData)), aesgcm.h)
+	}
+	return yOut
 }
 
 func min(x, y int) int {
@@ -96,25 +105,6 @@ func bwXMulY(x, y blockWord) blockWord {
 	return z
 }
 
-// Algorithm 2: GHASH function on pg 12 -- note currently unused
-//func (aesgcm *aesgcm) gHash(blocks []blockWord) blockWord {
-func (aesgcm *aesgcm) gHash(blocks []byte) blockWord {
-
-	var y blockWord
-	for index := 0; index < len(blocks); index = index + 16 {
-		y = bwXMulY(bwXor(y, bytes2bWord(blocks[index:index+16])), aesgcm.h)
-	}
-	return y
-}
-
-// generate ICB - currently hardcoded for 12-byte IV
-func (aesgcm *aesgcm) genICB(iv []byte) {
-	var j0 blockWord
-	j0.left = binary.BigEndian.Uint64(iv[0:8])
-	j0.right = (uint64(binary.BigEndian.Uint32(iv[8:12])) << 32) | 0x01
-	aesgcm.icb = j0 // incM32(j0)
-}
-
 func bWord2Bytes(x blockWord) []byte {
 	b := make([]byte, 16)
 	binary.BigEndian.PutUint64(b[0:8], x.left)
@@ -129,14 +119,9 @@ func bytes2bWord(x []byte) blockWord {
 	return result
 }
 
-func incM32(x blockWord) blockWord {
+func plusM32(x blockWord, y uint32) blockWord {
 	var z blockWord
-	z.left = x.left
-	var inc = uint32(x.right + 1) // chop off lower right side and increment
-	z.right = (x.right & 0xffffffff00000000) | uint64(inc)
+	z = x
+	z.right = (0xFFFFFFFF00000000 & z.right) | (0x00000000FFFFFFFF & (z.right + uint64(y)))
 	return z
-}
-
-func (aesgcm *aesgcm) calcEky0() {
-	aesgcm.eky0 = bytes2bWord(aesgcm.encrypt(bWord2Bytes(aesgcm.icb)))
 }
