@@ -14,10 +14,10 @@ import (
 	"testing"
 )
 
-var additionalData, plaintext, nonce, key, dst []byte
+var additionalData, plaintext, nonce, key, dst, dstG, dst1 []byte
 var instance1, instanceG cipher.AEAD
 
-func init() {
+func init1() {
 	additionalData = make([]byte, 8192)
 	plaintext = make([]byte, 16)
 	nonce = make([]byte, 12)
@@ -27,21 +27,26 @@ func init() {
 	rand.Read(additionalData)
 	rand.Read(plaintext)
 	rand.Read(nonce)
-	instance1 = NewAESGCM(key)
-	block, _ := aes.NewCipher(key)
-	instanceG, _ = cipher.NewGCM(block)
-}
+	dst1 = make([]byte, 16+16)
+	dstG = make([]byte, 16+16)
 
-func BenchmarkSeal1(b *testing.B) {
-
-	for n := 0; n < b.N; n++ {
-		instance1.Seal(dst, nonce, plaintext, additionalData)
-	}
 }
 
 func BenchmarkSealG(b *testing.B) {
+	init1()
 
+	block, _ := aes.NewCipher(key)
+	instanceG, _ = cipher.NewGCM(block)
 	for n := 0; n < b.N; n++ {
-		instanceG.Seal(dst, nonce, plaintext, additionalData)
+		dstG = instanceG.Seal(dst1, nonce, plaintext, additionalData)
+	}
+}
+
+func BenchmarkSeal1(b *testing.B) {
+	init1()
+
+	instance1 = NewAESGCM(key)
+	for n := 0; n < b.N; n++ {
+		dst1 = instance1.Seal(dstG, nonce, plaintext, additionalData)
 	}
 }
