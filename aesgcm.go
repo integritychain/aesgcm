@@ -20,6 +20,7 @@ type aesgcm struct {
 	eky0           blockWord
 	lenAlenC       blockWord
 	runningTag     blockWord
+	M              [16][256]blockWord
 }
 
 const (
@@ -56,7 +57,7 @@ func (aesgcm *aesgcm) Seal(dst []byte, nonce []byte, plaintext, additionalData [
 	aesgcm.runningTag = aesgcm.gHash(additionalData, blockWord{0, 0})
 	aesgcm.cipherBlocks(plaintext, dst)
 	aesgcm.runningTag = aesgcm.gHash(dst[:len(plaintext)], aesgcm.runningTag)
-	aesgcm.runningTag = bwXMulY(bwXor(aesgcm.runningTag, aesgcm.lenAlenC), aesgcm.h)
+	aesgcm.runningTag = aesgcm.bwXMulY2(bwXor(aesgcm.runningTag, aesgcm.lenAlenC), aesgcm.h)
 	aesgcm.runningTag = bwXor(aesgcm.runningTag, aesgcm.eky0)
 	copy(dst[len(plaintext):], bWord2Bytes(aesgcm.runningTag))
 	return dst
@@ -70,7 +71,7 @@ func (aesgcm aesgcm) Open(dst, nonce, ciphertext, additionalData []byte) ([]byte
 	aesgcm.initGcmY0(len(additionalData), len(ciphertext)-defaultTagSize, nonce)
 	aesgcm.runningTag = aesgcm.gHash(additionalData, blockWord{0, 0})
 	aesgcm.runningTag = aesgcm.gHash(ciphertext[:len(ciphertext)-defaultTagSize], aesgcm.runningTag)
-	aesgcm.runningTag = bwXMulY(bwXor(aesgcm.runningTag, aesgcm.lenAlenC), aesgcm.h)
+	aesgcm.runningTag = aesgcm.bwXMulY2(bwXor(aesgcm.runningTag, aesgcm.lenAlenC), aesgcm.h)
 	aesgcm.runningTag = bwXor(aesgcm.runningTag, aesgcm.eky0)
 	if !bytes.Equal(ciphertext[len(ciphertext)-defaultTagSize:], bWord2Bytes(aesgcm.runningTag)) {
 		dst = nil
