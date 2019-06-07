@@ -15,7 +15,6 @@ func (aesgcm *aesgcm) initGcmH(key []byte) *aesgcm { // init via New
 	hBlock = aesgcm.encrypt([]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})
 	aesgcm.h.left = binary.BigEndian.Uint64(hBlock[0:8])
 	aesgcm.h.right = binary.BigEndian.Uint64(hBlock[8:16])
-	aesgcm.genTable()
 	return aesgcm
 }
 
@@ -40,18 +39,22 @@ func (aesgcm *aesgcm) cipherBlocks(message, dst []byte) {
 	}
 }
 
-// Algorithm 2: GHASH function on pg 12
 func (aesgcm *aesgcm) gHash(blocks []byte, yIn blockWord) blockWord {
 
 	yOut := yIn
 	for index := 0; index < 16*(len(blocks)/16); index = index + 16 {
-		yOut = aesgcm.bwXMulY2(bwXor(yOut, bytes2bWord(blocks[index:index+16])), aesgcm.h)
-
+		xx1 := bwXor(yOut, bytes2bWord(blocks[index:index+16]))
+		xx2left, xx2right := gMul(xx1.left, xx1.right, aesgcm.h.left, aesgcm.h.right)
+		yOut.left = xx2left
+		yOut.right = xx2right
 	}
 	if len(blocks)%16 > 0 {
 		var tempData = make([]byte, 16)
 		copy(tempData, blocks[16*(len(blocks)/16):])
-		yOut = aesgcm.bwXMulY2(bwXor(yOut, bytes2bWord(tempData)), aesgcm.h)
+		xx1 := bwXor(yOut, bytes2bWord(tempData))
+		xx2left, xx2right := gMul(xx1.left, xx1.right, aesgcm.h.left, aesgcm.h.right)
+		yOut.left = xx2left
+		yOut.right = xx2right
 	}
 	return yOut
 }
@@ -67,82 +70,6 @@ func bwXor(a, b blockWord) blockWord {
 	a.right = a.right ^ b.right
 	a.left = a.left ^ b.left
 	return a
-}
-
-func bwXor2(a *blockWord, b blockWord) {
-	a.right = a.right ^ b.right
-	a.left = a.left ^ b.left
-}
-
-func bwRightShift1(a blockWord) blockWord {
-	a.right = a.right >> 1
-	if a.left&0x01 != 0 { // left LSB will move across
-		a.right = a.right | (1 << 63)
-	}
-	a.left = a.left >> 1
-	return a
-}
-
-// Note that indexing is swapped (bit 0 on left)
-func bwTestBit(a blockWord, index uint) bool {
-	if index < 64 {
-		return a.left&(1<<(63-index)) != 0
-	} else {
-		return a.right&(1<<(127-index)) != 0
-	}
-}
-
-// Algorithm 1: X * Y on pg 11-12
-func bwXMulY(x, y blockWord) blockWord {
-	var R = blockWord{0xe1 << (120 - 64), 0} // faster to have R as local var
-	var z = blockWord{0, 0}
-	var v = y // To stay consistent with spec naming
-	for index := uint(0); index < 128; index++ {
-		if bwTestBit(x, index) {
-			z = bwXor(z, v)
-		}
-		if bwTestBit(v, 127) { // Index 127 is LSB
-			v = bwXor(bwRightShift1(v), R)
-		} else {
-			v = bwRightShift1(v)
-		}
-	}
-	return z
-}
-
-func (aesgcm *aesgcm) bwXMulY2(x, y blockWord) blockWord {
-	var actual1, actual2 blockWord
-	actual1 = bwXor(actual1, aesgcm.M[15][byte(x.right)])
-	x.right = x.right >> 8
-	actual2 = bwXor(actual2, aesgcm.M[7][byte(x.left)])
-	x.left = x.left >> 8
-	actual1 = bwXor(actual1, aesgcm.M[14][byte(x.right)])
-	x.right = x.right >> 8
-	actual2 = bwXor(actual2, aesgcm.M[6][byte(x.left)])
-	x.left = x.left >> 8
-	actual1 = bwXor(actual1, aesgcm.M[13][byte(x.right)])
-	x.right = x.right >> 8
-	actual2 = bwXor(actual2, aesgcm.M[5][byte(x.left)])
-	x.left = x.left >> 8
-	actual1 = bwXor(actual1, aesgcm.M[12][byte(x.right)])
-	x.right = x.right >> 8
-	actual2 = bwXor(actual2, aesgcm.M[4][byte(x.left)])
-	x.left = x.left >> 8
-	actual1 = bwXor(actual1, aesgcm.M[11][byte(x.right)])
-	x.right = x.right >> 8
-	actual2 = bwXor(actual2, aesgcm.M[3][byte(x.left)])
-	x.left = x.left >> 8
-	actual1 = bwXor(actual1, aesgcm.M[10][byte(x.right)])
-	x.right = x.right >> 8
-	actual2 = bwXor(actual2, aesgcm.M[2][byte(x.left)])
-	x.left = x.left >> 8
-	actual1 = bwXor(actual1, aesgcm.M[9][byte(x.right)])
-	x.right = x.right >> 8
-	actual2 = bwXor(actual2, aesgcm.M[1][byte(x.left)])
-	x.left = x.left >> 8
-	actual1 = bwXor(actual1, aesgcm.M[8][byte(x.right)])
-	actual2 = bwXor(actual2, aesgcm.M[0][byte(x.left)])
-	return bwXor(actual1, actual2)
 }
 
 func bWord2Bytes(x blockWord) []byte {
@@ -166,18 +93,95 @@ func plusM32(x blockWord, y uint32) blockWord {
 	return z
 }
 
-func (aesgcm *aesgcm) genTable() {
-	h := aesgcm.h
+func rev64(x uint64) uint64 {
+	var result = x
+	result = ((result & 0x5555555555555555) << 1) | ((result >> 1) & 0x5555555555555555)
+	result = ((result & 0x3333333333333333) << 2) | ((result >> 2) & 0x3333333333333333)
+	result = ((result & 0x0F0F0F0F0F0F0F0F) << 4) | ((result >> 4) & 0x0F0F0F0F0F0F0F0F)
+	result = ((result & 0x00FF00FF00FF00FF) << 8) | ((result >> 8) & 0x00FF00FF00FF00FF)
+	result = ((result & 0x0000FFFF0000FFFF) << 16) | ((result >> 16) & 0x0000FFFF0000FFFF)
+	result = (result << 32) | (result >> 32)
+	return result
+}
 
-	for outer := uint(0); outer < 128; outer = outer + 8 {
-		for i := 0; i < 256; i++ {
-			var a blockWord
-			if outer > 56 {
-				a.right = uint64(i << (120 - outer))
-			} else {
-				a.left = uint64(i << (56 - outer))
-			}
-			aesgcm.M[outer/8][i] = bwXMulY(a, h)
-		}
-	}
+// 64-bit carry-less multiplication
+func bmul64(x, y uint64) uint64 {
+	x0 := x & 0x1111111111111111
+	x1 := x & 0x2222222222222222
+	x2 := x & 0x4444444444444444
+	x3 := x & 0x8888888888888888
+	y0 := y & 0x1111111111111111
+	y1 := y & 0x2222222222222222
+	y2 := y & 0x4444444444444444
+	y3 := y & 0x8888888888888888
+	z0 := x0*y0 ^ x1*y3 ^ x2*y2 ^ x3*y1
+	z1 := x0*y1 ^ x1*y0 ^ x2*y3 ^ x3*y2
+	z2 := x0*y2 ^ x1*y1 ^ x2*y0 ^ x3*y3
+	z3 := x0*y3 ^ x1*y2 ^ x2*y1 ^ x3*y0
+	z0 &= 0x1111111111111111
+	z1 &= 0x2222222222222222
+	z2 &= 0x4444444444444444
+	z3 &= 0x8888888888888888
+	return z0 | z1 | z2 | z3
+}
+
+func bmul128t256(x1, x0, y1, y0 uint64) (uint64, uint64, uint64, uint64) {
+
+	// Algorithm 2 from https://software.intel.com/sites/default/files/managed/72/cc/clmul-wp-rev-2.02-2014-04-20.pdf
+
+	// See https://en.wikipedia.org/wiki/Karatsuba_algorithm  // Note: Thomas' z2/z1 names are swapped
+
+	// This gives us low-order 64 bits
+	z0 := bmul64(x0, y0)
+	z2 := bmul64(x1, y1)
+	z1 := bmul64(x1^x0, y1^y0) ^ z2 ^ z0
+
+	// Bit-reverse the operands
+	x0r := rev64(x0)
+	x1r := rev64(x1)
+	y0r := rev64(y0) // When this is set to H, the rev64's will not be needed
+	y1r := rev64(y1)
+
+	// This gives us (bit-reversed) high-order bits
+	z0r := bmul64(x0r, y0r)
+	z2r := bmul64(x1r, y1r)
+	z1r := bmul64(x1r^x0r, y1r^y0r) ^ z2r ^ z0r
+
+	// Un-reverse the high-order bits and fix bit 63 that was created twice
+	z0h := rev64(z0r) >> 1
+	z1h := rev64(z1r) >> 1
+	z2h := rev64(z2r) >> 1
+
+	// Merge sets of 64-bit results into "single" 256-bit result
+	v0 := z0
+	v1 := z0h ^ z1
+	v2 := z2 ^ z1h
+	v3 := z2h
+
+	// Shift left one to fix into high order bit; TODO merge with above shifts
+	v3 = (v3 << 1) | (v2 >> 63)
+	v2 = (v2 << 1) | (v1 >> 63)
+	v1 = (v1 << 1) | (v0 >> 63)
+	v0 = v0 << 1
+
+	return v3, v2, v1, v0
+
+}
+
+func gMul(x1, x0 uint64, h1, h0 uint64) (uint64, uint64) {
+
+	h0r := h0 //rev64(h1)
+	h1r := h1 // rev64(h0)
+
+	v3, v2, v1, v0 := bmul128t256(x1, x0, h1r, h0r)
+
+	v2 ^= v0 ^ (v0 >> 1) ^ (v0 >> 2) ^ (v0 >> 7)
+	v1 ^= (v0 << 63) ^ (v0 << 62) ^ (v0 << 57)
+	v3 ^= v1 ^ (v1 >> 1) ^ (v1 >> 2) ^ (v1 >> 7)
+	v2 ^= (v1 << 63) ^ (v1 << 62) ^ (v1 << 57)
+
+	y0 := v2
+	y1 := v3
+
+	return y1, y0
 }

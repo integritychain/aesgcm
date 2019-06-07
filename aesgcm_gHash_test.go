@@ -12,7 +12,7 @@ func assertEquals(t *testing.T, expected uint64, actual uint64) {
 	}
 }
 
-func rev64(x uint64) uint64 {
+func rev64xx(x uint64) uint64 {
 	var result = x
 	result = ((result & 0x5555555555555555) << 1) | ((result >> 1) & 0x5555555555555555)
 	result = ((result & 0x3333333333333333) << 2) | ((result >> 2) & 0x3333333333333333)
@@ -34,7 +34,7 @@ func Test_rev64(t *testing.T) {
 }
 
 // 64-bit carry-less multiplication
-func bmul64(x, y uint64) uint64 {
+func bmul64xx(x, y uint64) uint64 {
 	x0 := x & 0x1111111111111111
 	x1 := x & 0x2222222222222222
 	x2 := x & 0x4444444444444444
@@ -79,7 +79,7 @@ func Test_bmul64(t *testing.T) {
 	}
 }
 
-func bmul128t256(x1, x0, y1, y0 uint64) (uint64, uint64, uint64, uint64) {
+func bmul128t256xx(x1, x0, y1, y0 uint64) (uint64, uint64, uint64, uint64) {
 
 	// Algorithm 2 from https://software.intel.com/sites/default/files/managed/72/cc/clmul-wp-rev-2.02-2014-04-20.pdf
 

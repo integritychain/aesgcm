@@ -51,6 +51,8 @@ func BenchmarkSealG(b *testing.B) {
 // BenchmarkSeal1-8   	   10000	    140629 ns/op  -> 17X slower
 // shift then xor
 // BenchmarkSeal1-8   	   10000	    134772 ns/op  -> 16X slower
+// Constant time
+// BenchmarkSeal1-8   	    3000	    419957 ns/op
 
 func BenchmarkSeal1(b *testing.B) {
 	init1()
