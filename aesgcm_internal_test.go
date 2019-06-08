@@ -223,70 +223,9 @@ func Test_gcm_initializeH(t *testing.T) {
 	assertEqualsString(t, "{b83b533708bf535d 0aa6e52980d53b78}", actual) // GCM Operation, Appendix B, Test Case 3, pg 28
 }
 
-//func Test_gcm_xMulY_1(t *testing.T) {
-//	H := blockWord{0xb83b533708bf535d, 0x0aa6e52980d53b78}
-//	A1 := blockWord{0, 0} // H to be multiplied by 0
-//	var X1 blockWord
-//	X1 = bwXMulY(A1, H)
-//	actual := fmt.Sprintf("%016x", X1)
-//	assertEqualsString(t, "{0000000000000000 0000000000000000}", actual) // First principles
-//}
-
-//func Test_gcm_xMulY_2(t *testing.T) {
-//	H := blockWord{0xb83b533708bf535d, 0x0aa6e52980d53b78}
-//	A1 := blockWord{0xfeedfacedeadbeef, 0xfeedfacedeadbeef} // First full block of A
-//	var X1 blockWord
-//	X1 = bwXMulY(A1, H)
-//	actual := fmt.Sprintf("%016x", X1)
-//	assertEqualsString(t, "{ed56aaf8a72d6704 9fdb9228edba1322}", actual) // GCM operation, Appendix B, Test Case 4, pg 29
-//}
-
-//func Test_gcm_xMulY_3(t *testing.T) {
-//	H := blockWord{0xb83b533708bf535d, 0x0aa6e52980d53b78}
-//	C1 := blockWord{0x42831ec221777424, 0x4b7221b784d0d49c} // First block of C
-//	var X1 blockWord
-//	X1 = bwXMulY(C1, H)
-//	actual := fmt.Sprintf("%016x", X1)
-//	assertEqualsString(t, "{59ed3f2bb1a0aaa0 7c9f56c6a504647b}", actual) // GCM operation, Appendix B, Test Case 3, pg 28
-//}
-
-//func Test_gcm_xMulY_commutative(t *testing.T) {
-//	// Multiplication should be commutative ->  A*B == B*A
-//	for index := 0; index < 10000; index++ { // 10k iterations
-//		operandA := blockWord{rand.Uint64(), rand.Uint64()}
-//		operandB := blockWord{rand.Uint64(), rand.Uint64()}
-//		result1 := bwXMulY(operandA, operandB)
-//		result2 := bwXMulY(operandB, operandA)
-//		assertEqualsString(t, fmt.Sprintf("%016x", result1.left), fmt.Sprintf("%016x", result2.left))   // First principles
-//		assertEqualsString(t, fmt.Sprintf("%016x", result1.right), fmt.Sprintf("%016x", result2.right)) // First principles
-//	}
-//}
-
-//func Test_gcm_xMulY_associative(t *testing.T) {
-//	// Multiplication should be commutative ->  (A*B)*C == A*(B*C)
-//	for index := 0; index < 10000; index++ { // 10k iterations
-//		operandA := blockWord{rand.Uint64(), rand.Uint64()}
-//		operandB := blockWord{rand.Uint64(), rand.Uint64()}
-//		operandC := blockWord{rand.Uint64(), rand.Uint64()}
-//		result1 := bwXMulY(bwXMulY(operandA, operandB), operandC)
-//		result2 := bwXMulY(operandA, bwXMulY(operandB, operandC))
-//		assertEqualsString(t, fmt.Sprintf("%016x", result1.left), fmt.Sprintf("%016x", result2.left))   // First principles
-//		assertEqualsString(t, fmt.Sprintf("%016x", result1.right), fmt.Sprintf("%016x", result2.right)) // First principles
-//	}
-//}
-
-//func Test_gcm_xMulY_distributive(t *testing.T) {
-//	// Multiplication should be commutative ->  (A+B)*C == A*C+B*C
-//	for index := 0; index < 10000; index++ { // 10k iterations
-//		operandA := blockWord{rand.Uint64(), rand.Uint64()}
-//		operandB := blockWord{rand.Uint64(), rand.Uint64()}
-//		operandC := blockWord{rand.Uint64(), rand.Uint64()}
-//		result1 := bwXMulY(bwXor(operandA, operandB), operandC)
-//		result2 := bwXor(bwXMulY(operandA, operandC), bwXMulY(operandB, operandC))
-//		assertEqualsString(t, fmt.Sprintf("%016x", result1.left), fmt.Sprintf("%016x", result2.left))   // First principles
-//		assertEqualsString(t, fmt.Sprintf("%016x", result1.right), fmt.Sprintf("%016x", result2.right)) // First principles
-//	}
-//}
+//
+// Deleted a bunch of gHash multiplication tests for earlier algorithm ... worth back-filling here
+//
 
 func Test_gcm_incM32(t *testing.T) {
 	var incResult blockWord

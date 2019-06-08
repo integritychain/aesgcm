@@ -14,14 +14,13 @@ import (
 	"testing"
 )
 
-var additionalData, plaintext, nonce, key, dst, dstG, dst1 []byte
+var additionalData, plaintext, nonce, key, dstG, dst1 []byte
 var instance1, instanceG cipher.AEAD
 
 func init1() {
 	additionalData = make([]byte, 100000)
 	plaintext = make([]byte, 16)
 	nonce = make([]byte, 12)
-	dst = make([]byte, 16+16)
 	key = make([]byte, 16)
 	rand.Read(key)
 	rand.Read(additionalData)
@@ -53,6 +52,8 @@ func BenchmarkSealG(b *testing.B) {
 // BenchmarkSeal1-8   	   10000	    134772 ns/op  -> 16X slower
 // Constant time
 // BenchmarkSeal1-8   	    3000	    419957 ns/op
+// BenchmarkSeal1-8   	    3000	    411716 ns/op
+// BenchmarkSeal1-8   	    5000	    370191 ns/op  h/hr inside of aesgcm struct
 
 func BenchmarkSeal1(b *testing.B) {
 	init1()

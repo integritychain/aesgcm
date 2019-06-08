@@ -134,14 +134,14 @@ func Test_decryption(t *testing.T) {
 			}
 			if (strings.Contains(line, "FAIL") || strings.Contains(line, "PT =")) && Taglen == 128 && IVlen == 96 {
 				t.Run(fmt.Sprintf("testDecrypt with  %v  line  %d", fileName, lineNumber),
-					testDecrypt(IV, Key, PT[0:PTlen/8], AAD[0:AADlen/8], CT[0:PTlen/8], Tag[0:Taglen/8], Taglen, FAIL, lineNumber))
+					testDecrypt(IV, Key, PT[0:PTlen/8], AAD[0:AADlen/8], CT[0:PTlen/8], Tag[0:Taglen/8], FAIL, lineNumber))
 			}
 		}
 		_ = fileHandle.Close()
 	}
 }
 
-func testDecrypt(nonce, key, plainText, additionalData, cipherText, tag []byte, Taglen int, FAIL bool, lineNumber int) func(*testing.T) {
+func testDecrypt(nonce, key, plainText, additionalData, cipherText, tag []byte, FAIL bool, lineNumber int) func(*testing.T) {
 	return func(t *testing.T) {
 		var aesgcm1 cipher.AEAD
 		var dst []byte
@@ -162,8 +162,7 @@ func testDecrypt(nonce, key, plainText, additionalData, cipherText, tag []byte, 
 				t.Error(fmt.Sprintf("Open returned error despite no FAIL on line %v\n", lineNumber)) //
 			}
 		}
-		//lessTag := len(actual) - 128/8 + Taglen/8
-		expected := plainText // append(cipherText, tag...)
+		expected := plainText
 		if !bytes.Equal(expected, actual) {
 			t.Error(fmt.Sprintf("\nExpected %x\nGot      %x\n", expected, actual)) //
 		}
